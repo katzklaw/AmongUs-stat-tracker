@@ -1,0 +1,319 @@
+:root {
+  color-scheme: light dark;
+  font-family: Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #121826;
+  color: #f4f7fb;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-header h1 {
+  margin: 0 0 8px;
+}
+
+.dropzone {
+  border: 2px dashed #4b8bf3;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(75, 139, 243, 0.12);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.dropzone.dragover {
+  background: rgba(75, 139, 243, 0.28);
+}
+
+.dropzone input {
+  display: block;
+  margin: 0 auto 12px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.search-label {
+  font-weight: 700;
+}
+
+#searchInput {
+  flex: 1 1 260px;
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #98a7c7;
+}
+
+#clearButton {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #f97316;
+  color: white;
+  cursor: pointer;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: #1d2638;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.summary-label {
+  display: block;
+  font-size: 0.9rem;
+  color: #b9c6dd;
+  margin-bottom: 8px;
+}
+
+.summary-card strong {
+  font-size: 1.8rem;
+}
+
+.table-section {
+  margin-top: 24px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.table-wrap {
+  overflow: auto;
+  border-radius: 12px;
+  background: #1d2638;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+th {
+  background: #273247;
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.empty {
+  color: #b9c6dd;
+  font-style: italic;
+}
+
+.drop-zone {
+  border: 3px dashed #5c6bc0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  text-align: center;
+  background: #1f2333;
+  color: #ffffff;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.drop-zone.dragover {
+  background: #2d3657;
+  border-color: #8ea2ff;
+}
+
+.import-options {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+#importAs,
+#categorySelect {
+  background: #2c3148;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+#chooseFilesButton {
+  background: #5c6bc0;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#chooseFilesButton:hover {
+  background: #7385e6;
+}
+.modal {
+
+    position: fixed;
+
+    inset: 0;
+
+    background: rgba(0,0,0,.65);
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    z-index: 1000;
+
+}
+
+.hidden{
+
+    display:none;
+
+}
+
+.modal-content{
+
+    width:900px;
+
+    max-width:95%;
+
+    max-height:85vh;
+
+    overflow:auto;
+
+    background:#222;
+
+    color:white;
+
+    border-radius:10px;
+
+    padding:20px;
+
+    border:1px solid #555;
+
+}
+
+.modal-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:15px;
+
+}
+
+.modal-header h2{
+
+    margin:0;
+
+}
+
+.modal-header button{
+
+    font-size:28px;
+
+    cursor:pointer;
+
+    background:none;
+
+    border:none;
+
+    color:white;
+
+}
+
+.manager-table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    margin-top:15px;
+
+}
+
+.manager-table th{
+
+    text-align:left;
+
+    padding:10px;
+
+    border-bottom:1px solid #444;
+
+}
+
+.manager-table td{
+
+    padding:10px;
+
+    border-bottom:1px solid #333;
+
+}
+
+.manager-table button{
+
+    margin-right:8px;
+
+    padding:4px 10px;
+
+    cursor:pointer;
+
+}
+
+#playerManagerSearch{
+
+    width:100%;
+
+    padding:10px;
+
+    font-size:15px;
+
+    border-radius:6px;
+
+    border:1px solid #555;
+
+    background:#333;
+
+    color:white;
+
+}

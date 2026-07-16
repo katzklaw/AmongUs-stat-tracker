@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Among Us Stat Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="page-header">
+        <div>
+          <h1>Among Us Stat Tracker</h1>
+          <p>Drop one or more log files to parse them locally and search the results.</p>
+        </div>
+      </header>
+
+<section class="drop-zone" id="dropZone">
+
+  <div class="import-options">
+
+    <label for="categorySelect">Import As</label>
+
+    <select id="categorySelect">
+      <option value="Casual">Casual</option>
+      <option value="Tournament">Tournament</option>
+    </select>
+
+    <input
+      id="fileInput"
+      type="file"
+      multiple
+      accept=".log,.txt,text/plain"
+      hidden
+    />
+
+    <button
+      type="button"
+      id="chooseFilesButton"
+    >
+      Choose Files
+    </button>
+
+  </div>
+
+  <p>Drag files here or click the button to choose log files.</p>
+
+</section>
+
+      <section class="toolbar">
+        <label class="search-label" for="searchInput">Search</label>
+        <input id="searchInput" type="search" placeholder="Search player, file, or winner" />
+        <button id="playerManagerButton" type="button">Player Manager</button>
+        <button
+class="alias-player"
+data-player="${player.name}"
+>
+Alias
+</button>
+        <button id="clearButton" type="button">Clear saved data</button>
+        <label for="categoryFilter">Category</label>
+
+<select id="categoryFilter">
+    <option value="All">All</option>
+</select>
+      </section>
+
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span class="summary-label">Games</span>
+          <strong id="gamesTotal">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Crew Wins</span>
+          <strong id="crewWinsTotal">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Imp Wins</span>
+          <strong id="impWinsTotal">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Total Kills</span>
+          <strong id="totalKillsTotal">0</strong>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Crew Deaths</span>
+          <strong id="crewDeathsTotal">0</strong>
+        </article>
+      </section>
+
+      <section class="table-section">
+        <div class="section-heading">
+          <h2>Players</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Games Played</th>
+                <th>Crewmate Games</th>
+                <th>Impostor Games</th>
+                <th>Crew Wins</th>
+                <th>Imp Wins</th>
+                <th>Crew Win Rate</th>
+                <th>Imp Win Rate</th>
+              </tr>
+            </thead>
+            <tbody id="playerTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="table-section">
+        <div class="section-heading">
+          <h2>Games</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>File</th>
+                <th>Games</th>
+                <th>Crew Wins</th>
+                <th>Imp Wins</th>
+                <th>Total Kills</th>
+                <th>Crew Deaths</th>
+              </tr>
+            </thead>
+            <tbody id="gameTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+<div id="playerManagerModal" class="modal hidden">
+
+  <div class="modal-content">
+
+    <div class="modal-header">
+
+      <h2>Player Manager</h2>
+
+      <button id="closePlayerManager">&times;</button>
+
+    </div>
+
+    <input
+      id="playerManagerSearch"
+      type="search"
+      placeholder="Search players..."
+    />
+
+    <table class="manager-table">
+
+      <thead>
+
+        <tr>
+
+          <th>Player</th>
+          <th>Games</th>
+          <th>Actions</th>
+
+        </tr>
+
+      </thead>
+
+      <tbody id="playerManagerBody">
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/playerStats.js"></script>
+    <script src="js/players.js"></script>
+    <script src="js/playerDatabase.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
