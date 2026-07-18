@@ -41,31 +41,30 @@ function loadPlayerSettings() {
             PLAYER_SETTINGS_KEY
         );
 
+    const defaults = {
+        aliases: {},
+        hidden: [],
+        keepSingleGame: []
+    };
+
     if (!raw) {
-
-        return {
-
-            aliases: {},
-
-            hidden: []
-
-        };
-
+        return defaults;
     }
 
     try {
 
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+
+        // Migrate settings saved before keepSingleGame existed.
+        return {
+            aliases: parsed.aliases || {},
+            hidden: parsed.hidden || [],
+            keepSingleGame: parsed.keepSingleGame || []
+        };
 
     } catch {
 
-        return {
-
-            aliases: {},
-
-            hidden: []
-
-        };
+        return defaults;
 
     }
 

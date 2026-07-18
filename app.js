@@ -1,6 +1,6 @@
 
 const elements = {
-  
+
   dropZone: document.getElementById('dropZone'),
   fileInput: document.getElementById('fileInput'),
   searchInput: document.getElementById('searchInput'),
@@ -13,13 +13,26 @@ const elements = {
   totalKillsTotal: document.getElementById('totalKillsTotal'),
   crewDeathsTotal: document.getElementById('crewDeathsTotal'),
   categorySelect: document.getElementById('categorySelect'),
+  categoryFilter: document.getElementById('categoryFilter'),
   chooseFilesButton: document.getElementById('chooseFilesButton'),
   playerManagerButton: document.getElementById('playerManagerButton'),
   playerManagerModal: document.getElementById('playerManagerModal'),
   closePlayerManager: document.getElementById('closePlayerManager'),
   playerManagerSearch: document.getElementById('playerManagerSearch'),
   playerManagerBody: document.getElementById('playerManagerBody'),
-  
+  showHiddenCheckbox: document.getElementById('showHiddenCheckbox'),
+  trendsPlayerSelect: document.getElementById('trendsPlayerSelect'),
+  trendsTableBody: document.getElementById('trendsTableBody'),
+  playerDetailModal: document.getElementById('playerDetailModal'),
+  closePlayerDetail: document.getElementById('closePlayerDetail'),
+  playerDetailName: document.getElementById('playerDetailName'),
+  playerDetailSummary: document.getElementById('playerDetailSummary'),
+  playerDetailKillLocations: document.getElementById('playerDetailKillLocations'),
+  playerDetailDeathLocations: document.getElementById('playerDetailDeathLocations'),
+  playerDetailMonthlyBody: document.getElementById('playerDetailMonthlyBody'),
+  playerNameHeader: document.getElementById('playerNameHeader'),
+  playerGamesHeader: document.getElementById('playerGamesHeader'),
+
 };
 
 if (!elements.categorySelect) {
@@ -35,7 +48,17 @@ const state = {
     playerDatabase:
         loadPlayerDatabase(),
 
-    search: ""
+    search: "",
+
+    playerManagerSearch: "",
+
+    categoryFilter: "All",
+
+    playerManagerShowHidden: false,
+
+    trendsPlayerName: null,
+
+    playerSort: { key: 'games', dir: 'desc' }
 
 };
 
@@ -43,7 +66,30 @@ function getSelectedCategory() {
   return elements.categorySelect.value;
 }
 
-function aggregatePlayers(entries) {
+function getFilteredEntries() {
+  if (!state.categoryFilter || state.categoryFilter === 'All') {
+    return state.entries;
+  }
+  return state.entries.filter((entry) => entry.category === state.categoryFilter);
+}
+
+function updateCategoryFilterOptions() {
+  const categories = Array.from(new Set(state.entries.map((entry) => entry.category))).sort();
+  const current = elements.categoryFilter.value || state.categoryFilter || 'All';
+  const options = ['All', ...categories];
+
+  elements.categoryFilter.innerHTML = options
+    .map((cat) => `<option value="${cat}">${cat}</option>`)
+    .join('');
+
+  elements.categoryFilter.value = options.includes(current) ? current : 'All';
+  state.categoryFilter = elements.categoryFilter.value;
+}
+
+// Merges every game's per-player records (from parser.js) into running
+// totals, honoring name aliases. Does NOT filter out hidden players -
+// that's a separate step so the Player Manager can still see everyone.
+function sumPlayerStatsFromEntries(entries) {
 
   const playerMap = {};
 
@@ -51,35 +97,76 @@ function aggregatePlayers(entries) {
 
   for (const entry of entries) {
 
-    for (const [originalName, stat] of Object.entries(entry.playerStats || {})) {
+    for (const record of Object.values(entry.playerStats || {})) {
 
-      const playerName =
+      const originalName = record.displayName;
+
+      const finalName =
         aliases[originalName.toLowerCase()] || originalName;
 
-      if (!playerMap[playerName]) {
+      if (!playerMap[finalName]) {
 
-        playerMap[playerName] = createPlayerStats();
+        playerMap[finalName] = createEmptyAggregateStats(finalName);
 
       }
 
-      const target = playerMap[playerName];
-
-      target.gamesPlayed += stat.gamesPlayed;
-      target.gamesAsCrewmate += stat.gamesAsCrewmate;
-      target.gamesAsImpostor += stat.gamesAsImpostor;
-      target.crewWins += stat.crewWins;
-      target.impWins += stat.impWins;
+      mergeGameRecordIntoAggregate(playerMap[finalName], record);
 
     }
 
   }
 
-  return finalizePlayerRates(playerMap);
+  return playerMap;
 
 }
 
-function renderSummary() {
-  const totals = state.entries.reduce(
+// A player is excluded from dashboard stats if they were manually hidden,
+// OR if they've only ever appeared in one game and haven't been explicitly
+// "kept" (players.settings.keepSingleGame overrides the auto-hide).
+function isPlayerExcluded(name, stats) {
+  const key = name.toLowerCase();
+  const hidden = state.playerSettings.hidden || [];
+  const kept = state.playerSettings.keepSingleGame || [];
+
+  if (hidden.includes(key)) {
+    return true;
+  }
+
+  if (stats.gamesPlayed <= 1 && !kept.includes(key)) {
+    return true;
+  }
+
+  return false;
+}
+
+// Every player used for actual dashboard stats: aliased + hidden/one-off
+// players removed + rates computed.
+function aggregatePlayers(entries) {
+
+  const raw = sumPlayerStatsFromEntries(entries);
+
+  for (const name of Object.keys(raw)) {
+
+    if (isPlayerExcluded(name, raw[name])) {
+
+      delete raw[name];
+
+    }
+
+  }
+
+  return finalizePlayerRates(raw);
+
+}
+
+// Every player ever seen, hidden or not - used by Player Manager and the
+// trends dropdown so hidden players can still be found/restored.
+function getAllPlayersRaw() {
+  return finalizePlayerRates(sumPlayerStatsFromEntries(state.entries));
+}
+
+function renderSummary(entries) {
+  const totals = entries.reduce(
     (acc, entry) => {
       acc.games += entry.games;
       acc.crewWins += entry.crewWins;
@@ -98,63 +185,361 @@ function renderSummary() {
   elements.crewDeathsTotal.textContent = String(totals.crewDeaths);
 }
 
-function renderGames() {
+function formatWinner(entry) {
+  if (entry.winnerTeam === 'crewmate') return 'Crewmate';
+  if (entry.winnerTeam === 'impostor') return 'Impostor';
+  return 'Unknown';
+}
+
+function formatWinCondition(entry) {
+  if (!entry.winCondition) return 'Unknown';
+  return entry.winCondition.charAt(0).toUpperCase() + entry.winCondition.slice(1);
+}
+
+function formatGameDate(entry) {
+  if (!entry.date) return 'Unknown';
+  return new Date(entry.date).toLocaleDateString();
+}
+
+function renderGames(entries) {
   const searchTerm = state.search;
-  const filtered = state.entries.filter((entry) => {
-    const haystack = `${entry.fileName} ${entry.games} ${entry.crewWins} ${entry.impWins} ${entry.totalKills} ${entry.crewDeaths}`.toLowerCase();
-    return haystack.includes(searchTerm);
-  });
+  const filtered = entries
+    .filter((entry) => {
+      const haystack = `${entry.fileName} ${entry.category} ${entry.map || ''} ${formatWinner(entry)} ${formatWinCondition(entry)}`.toLowerCase();
+      return haystack.includes(searchTerm);
+    })
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   if (filtered.length === 0) {
-    elements.gameTableBody.innerHTML = '<tr><td colspan="7" class="empty">No matching game data yet.</td></tr>';
+    elements.gameTableBody.innerHTML = '<tr><td colspan="8" class="empty">No matching game data yet.</td></tr>';
     return;
   }
 
   elements.gameTableBody.innerHTML = filtered.map((entry) => `
     <tr>
       <td>${entry.category}</td>
+      <td>${formatGameDate(entry)}</td>
+      <td>${entry.map || 'Unknown'}</td>
       <td>${entry.fileName}</td>
-      <td>${entry.games}</td>
-      <td>${entry.crewWins}</td>
-      <td>${entry.impWins}</td>
+      <td>${formatWinner(entry)}</td>
+      <td>${formatWinCondition(entry)}</td>
       <td>${entry.totalKills}</td>
       <td>${entry.crewDeaths}</td>
     </tr>
   `).join('');
 }
-function renderPlayers() {
-    console.log("renderPlayers called");
+
+function sortPlayerRows(rows) {
+  const { key, dir } = state.playerSort;
+  const factor = dir === 'asc' ? 1 : -1;
+
+  return rows.slice().sort((a, b) => {
+    if (key === 'name') {
+      return factor * a.playerName.localeCompare(b.playerName);
+    }
+    return factor * (a.gamesPlayed - b.gamesPlayed);
+  });
 }
+
+function toggleSort(key) {
+  if (state.playerSort.key === key) {
+    state.playerSort.dir = state.playerSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.playerSort.key = key;
+    state.playerSort.dir = key === 'name' ? 'asc' : 'desc';
+  }
+  renderPlayers();
+}
+
+function updatePlayerTableHeaders() {
+  const { key, dir } = state.playerSort;
+  const arrow = dir === 'asc' ? ' ▲' : ' ▼';
+
+  if (elements.playerNameHeader) {
+    elements.playerNameHeader.textContent = 'Player' + (key === 'name' ? arrow : '');
+  }
+  if (elements.playerGamesHeader) {
+    elements.playerGamesHeader.textContent = 'Games' + (key === 'games' ? arrow : '');
+  }
+}
+
+function renderPlayers() {
+  const searchTerm = state.search;
+  const playerRows = Object.entries(state.players || {}).map(([playerName, stat]) => ({ playerName, ...stat }));
+  const filtered = sortPlayerRows(
+    playerRows.filter((row) => {
+      const haystack = `${row.playerName} ${row.gamesPlayed} ${row.gamesAsCrewmate} ${row.gamesAsImpostor} ${row.crewWins} ${row.impWins}`.toLowerCase();
+      return haystack.includes(searchTerm);
+    })
+  );
+
+  updatePlayerTableHeaders();
+
+  if (filtered.length === 0) {
+    elements.playerTableBody.innerHTML = '<tr><td colspan="13" class="empty">No matching players yet.</td></tr>';
+    return;
+  }
+
+  elements.playerTableBody.innerHTML = filtered.map((row) => `
+    <tr>
+      <td>${row.playerName}</td>
+      <td>${row.gamesPlayed}</td>
+      <td>${row.gamesAsCrewmate}</td>
+      <td>${row.gamesAsImpostor}</td>
+      <td>${row.crewWins}</td>
+      <td>${row.impWins}</td>
+      <td>${formatRate(row.crewWinRate)}</td>
+      <td>${formatRate(row.impWinRate)}</td>
+      <td>${row.kills}</td>
+      <td>${formatAverage(row.avgKillsPerImpGame)}</td>
+      <td>${formatPercent(row.survivalRate)}</td>
+      <td>${formatPercent(row.taskCompletionRate)}</td>
+      <td><button class="details-button player-details-button" data-player="${row.playerName}">Details</button></td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('.player-details-button').forEach((button) => {
+    button.onclick = () => openPlayerDetail(button.dataset.player);
+  });
+}
+
+function renderAliasList() {
+
+  console.log("========== ALIASES ==========");
+
+  const aliases =
+    state.playerSettings.aliases;
+
+  const keys =
+    Object.keys(aliases).sort();
+
+  if (!keys.length) {
+
+    console.log("No aliases.");
+
+    return;
+
+  }
+
+  keys.forEach(name => {
+
+    console.log(
+      name + "  →  " + aliases[name]
+    );
+
+  });
+
+}
+
+function createAlias(oldName, newName) {
+
+  oldName = oldName.trim();
+  newName = newName.trim();
+
+  if (!oldName || !newName) {
+    return;
+  }
+
+  const aliases = state.playerSettings.aliases;
+
+  // Resolve newName to whatever it ultimately already points to, if anything.
+  let finalName = newName;
+
+  while (aliases[finalName.toLowerCase()]) {
+
+    finalName = aliases[finalName.toLowerCase()];
+
+  }
+
+  // Anyone who has changed names several times will have older aliases
+  // pointing at oldName itself - redirect those too, or merging "Name2"
+  // into "Name3" would silently orphan "Name1 -> Name2".
+  for (const [alias, target] of Object.entries(aliases)) {
+
+    if (target.toLowerCase() === oldName.toLowerCase()) {
+
+      aliases[alias] = finalName;
+
+    }
+
+  }
+
+  aliases[oldName.toLowerCase()] = finalName;
+
+  savePlayerSettings(state.playerSettings);
+
+  renderAll();
+
+}
+
+// All the names that currently resolve to `playerName`, for display in the
+// Player Manager.
+function getAliasesForPlayer(playerName) {
+
+  const aliases = state.playerSettings.aliases;
+  const matches = [];
+
+  for (const [alias, target] of Object.entries(aliases)) {
+
+    if (target.toLowerCase() === playerName.toLowerCase()) {
+
+      matches.push(alias);
+
+    }
+
+  }
+
+  return matches;
+
+}
+
+function removeAlias(alias) {
+
+  if (!confirm(`Stop merging "${alias}" into its current name? Future imports of "${alias}" will show up as their own player again.`)) {
+    return;
+  }
+
+  delete state.playerSettings.aliases[alias.toLowerCase()];
+
+  savePlayerSettings(state.playerSettings);
+
+  renderAll();
+
+}
+
+function askForAlias(playerName) {
+
+  const newName = prompt(
+
+      `Merge "${playerName}" into which player? (Type the name you want to keep.)`,
+
+      playerName
+
+  );
+
+  if (!newName) {
+
+      return;
+
+  }
+
+  if (newName.trim().toLowerCase() === playerName.toLowerCase()) {
+
+      return;
+
+  }
+
+  createAlias(
+
+      playerName,
+
+      newName.trim()
+
+  );
+
+}
+
+function toggleHidden(playerName) {
+
+  const key = playerName.toLowerCase();
+  const hidden = state.playerSettings.hidden;
+  const idx = hidden.indexOf(key);
+
+  if (idx === -1) {
+
+    if (!confirm(`Hide "${playerName}" from all stats? You can bring them back later with "Show hidden players" in the Player Manager.`)) {
+      return;
+    }
+
+    hidden.push(key);
+
+  } else {
+
+    hidden.splice(idx, 1);
+
+  }
+
+  savePlayerSettings(state.playerSettings);
+
+  renderAll();
+
+}
+
+function toggleKeepSingleGame(playerName) {
+
+  const key = playerName.toLowerCase();
+  const kept = state.playerSettings.keepSingleGame;
+  const idx = kept.indexOf(key);
+
+  if (idx === -1) {
+    kept.push(key);
+  } else {
+    kept.splice(idx, 1);
+  }
+
+  savePlayerSettings(state.playerSettings);
+
+  renderAll();
+
+}
+
+function openPlayerManager() {
+
+  state.playerManagerSearch = "";
+
+  elements.playerManagerSearch.value = "";
+
+  state.playerManagerShowHidden = false;
+
+  elements.showHiddenCheckbox.checked = false;
+
+  renderPlayerManager();
+
+  elements.playerManagerModal.classList.remove("hidden");
+
+}
+
+function closePlayerManager() {
+
+  elements.playerManagerModal.classList.add("hidden");
+
+}
+
 function renderPlayerManager() {
 
     const search =
-    (state.playerManagerSearch || "").toLowerCase();
+        state.playerManagerSearch.toLowerCase();
 
-    const hidden =
-    state.playerSettings?.hidden || [];
+    const hiddenSet = new Set(state.playerSettings.hidden);
+    const keptSet = new Set(state.playerSettings.keepSingleGame);
+
+    const allPlayers = getAllPlayersRaw();
 
     const rows =
-        Object.entries(state.players)
+        Object.entries(allPlayers)
 
-        .map(([name,stats])=>({
+        .map(([name, stats]) => {
 
-            name,
+            const key = name.toLowerCase();
+            const isManuallyHidden = hiddenSet.has(key);
+            const isAutoHidden = stats.gamesPlayed <= 1 && !keptSet.has(key);
 
-            games:stats.gamesPlayed
+            return {
+                name,
+                games: stats.gamesPlayed,
+                isManuallyHidden,
+                isAutoHidden,
+                isHidden: isManuallyHidden || isAutoHidden,
+                aliases: getAliasesForPlayer(name)
+            };
 
-        }))
+        })
 
-        .filter(player => {
+        .filter(player =>
 
-    if (!player.name) {
-        return false;
-    }
+            state.playerManagerShowHidden ? true : !player.isHidden
 
-    return !hidden.includes(
-        player.name.toLowerCase()
-    );
-
-})
+        )
 
         .filter(player=>
 
@@ -176,7 +561,7 @@ function renderPlayerManager() {
 
         <tr>
 
-        <td colspan="3">
+        <td colspan="4">
 
         No players.
 
@@ -192,42 +577,50 @@ function renderPlayerManager() {
 
     elements.playerManagerBody.innerHTML=
 
-    rows.map(player=>`
+    rows.map(player=>{
 
+        const badge = player.isManuallyHidden
+            ? ' <em>(hidden)</em>'
+            : player.isAutoHidden
+                ? ' <em>(auto-hidden — 1 game)</em>'
+                : '';
+
+        const aliasHtml = player.aliases.length
+            ? player.aliases.map(alias => `
+                <span class="alias-chip">
+                  ${alias}
+                  <button class="remove-alias" data-alias="${alias}" title="Stop merging ${alias}">&times;</button>
+                </span>
+              `).join('')
+            : '<span class="no-aliases">—</span>';
+
+        const hideRestoreButton = player.isManuallyHidden
+            ? `<button class="toggle-hidden-player" data-player="${player.name}">Restore</button>`
+            : `<button class="toggle-hidden-player" data-player="${player.name}">Hide</button>`;
+
+        const keepButton = (!player.isManuallyHidden && player.isAutoHidden)
+            ? `<button class="toggle-keep-player" data-player="${player.name}">Keep</button>`
+            : (!player.isManuallyHidden && player.games <= 1)
+                ? `<button class="toggle-keep-player" data-player="${player.name}">Stop keeping</button>`
+                : '';
+
+        return `
     <tr>
-
-    <td>${player.name}</td>
-
+    <td>${player.name}${badge}</td>
     <td>${player.games}</td>
-
+    <td>${aliasHtml}</td>
     <td>
-
-        <button
-            class="merge-player"
-            data-player="${player.name}"
-        >
-
-          Merge / Alias
-
-</button>
-
-        <button
-            class="hide-player"
-            data-player="${player.name}"
-        >
-
-            Hide
-
-        </button>
-
+        <button class="merge-player" data-player="${player.name}">Merge / Alias</button>
+        ${hideRestoreButton}
+        ${keepButton}
     </td>
-
     </tr>
+    `;
 
-    `).join("");
+    }).join("");
 
     document
-        .querySelectorAll(".alias-player")
+        .querySelectorAll(".merge-player")
         .forEach(button=>{
 
         button.onclick=()=>{
@@ -243,12 +636,12 @@ function renderPlayerManager() {
     });
 
     document
-        .querySelectorAll(".hide-player")
+        .querySelectorAll(".toggle-hidden-player")
         .forEach(button=>{
 
         button.onclick=()=>{
 
-            hidePlayer(
+            toggleHidden(
 
                 button.dataset.player
 
@@ -258,164 +651,211 @@ function renderPlayerManager() {
 
     });
 
-}
-function openPlayerManager() {
+    document
+        .querySelectorAll(".toggle-keep-player")
+        .forEach(button=>{
 
-  state.playerManagerSearch = "";
+        button.onclick=()=>{
 
-  elements.playerManagerSearch.value = "";
+            toggleKeepSingleGame(
 
-  renderPlayerManager();
-  function renderAliasList() {
+                button.dataset.player
 
-  console.log("========== ALIASES ==========");
-  
+            );
 
-  const aliases =
-    state.playerSettings.aliases;
+        };
 
-  const keys =
-    Object.keys(aliases).sort();
+    });
 
-  if (!keys.length) {
+    document
+        .querySelectorAll(".remove-alias")
+        .forEach(button=>{
 
-    console.log("No aliases.");
+        button.onclick=()=>{
 
-    return;
-  
-}
-  function askForAlias(playerName) {
+            removeAlias(
 
-    const newName = prompt(
+                button.dataset.alias
 
-        `Merge "${playerName}" into which player?`,
+            );
 
-        playerName
+        };
 
-    );
-
-    if (!newName) {
-
-        return;
-
-    }
-
-    if (newName.trim().toLowerCase() === playerName.toLowerCase()) {
-
-        return;
-
-    }
-
-    createAlias(
-
-        playerName,
-
-        newName.trim()
-
-    );
-function hidePlayer(playerName) {
-
-    if (!confirm(`Hide "${playerName}"?`)) {
-
-        return;
-
-    }
-
-    if (!state.playerSettings.hidden.includes(playerName.toLowerCase())) {
-
-        state.playerSettings.hidden.push(playerName.toLowerCase());
-
-    }
-
-    savePlayerSettings();
-    renderAliasList();
-
-    renderPlayerManager();
-
-    renderAll();
+    });
 
 }
+
+function getMonthKey(isoDate) {
+  if (!isoDate) return 'unknown';
+  return isoDate.slice(0, 7); // "YYYY-MM"
 }
-function createAlias(oldName, newName) {
 
-  oldName = oldName.trim();
-  newName = newName.trim();
+function formatMonthLabel(monthKey) {
+  if (monthKey === 'unknown') return 'Unknown date';
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
 
-  if (!oldName || !newName) {
+function groupEntriesByMonth(entries) {
+  const groups = {};
+  for (const entry of entries) {
+    const key = getMonthKey(entry.date);
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(entry);
+  }
+  return groups;
+}
+
+// Returns [{ monthKey, label, stat }, ...] in chronological order, one row
+// per month that `playerName` actually appears in (within `entries`).
+function computeMonthlyStatsForPlayer(playerName, entries) {
+  const groups = groupEntriesByMonth(entries);
+  const monthKeys = Object.keys(groups).sort(); // "YYYY-MM" sorts chronologically; "unknown" sorts last
+  const rows = [];
+
+  for (const key of monthKeys) {
+    const monthPlayers = aggregatePlayers(groups[key]);
+    const stat = monthPlayers[playerName];
+    if (stat) {
+      rows.push({ monthKey: key, label: formatMonthLabel(key), stat });
+    }
+  }
+
+  return rows;
+}
+
+function renderMonthlyTable(tbodyEl, playerName, entries) {
+  const rows = computeMonthlyStatsForPlayer(playerName, entries);
+
+  if (!rows.length) {
+    tbodyEl.innerHTML = '<tr><td colspan="7" class="empty">No games found for this player in the current filter.</td></tr>';
     return;
   }
 
-  let finalName = newName;
-
-while (
-  state.playerSettings.aliases[
-    finalName.toLowerCase()
-  ]
-) {
-
-  finalName =
-    state.playerSettings.aliases[
-      finalName.toLowerCase()
-    ];
-
-}
-
-state.playerSettings.aliases[
-  oldName.toLowerCase()
-] = finalName;
-
-  savePlayerSettings();
-
-  state.players =
-    aggregatePlayers(state.entries);
-
-  renderAll();
-
-
-}
-
-  elements.playerManagerModal.classList.remove("hidden");
-
-}
-
-function closePlayerManager() {
-
-  elements.playerManagerModal.classList.add("hidden");
-
-}
-  const searchTerm = state.search;
-  const playerRows = Object.entries(state.players || {}).map(([playerName, stat]) => ({ playerName, ...stat }));
-  const filtered = playerRows.filter((row) => {
-    const haystack = `${row.playerName} ${row.gamesPlayed} ${row.gamesAsCrewmate} ${row.gamesAsImpostor} ${row.crewWins} ${row.impWins}`.toLowerCase();
-    return haystack.includes(searchTerm);
-  });
-
-  if (filtered.length === 0) {
-    elements.playerTableBody.innerHTML = '<tr><td colspan="8" class="empty">No matching players yet.</td></tr>';
-    return;
-  }
-
-  elements.playerTableBody.innerHTML = filtered.map((row) => `
+  tbodyEl.innerHTML = rows.map(({ label, stat }) => `
     <tr>
-      <td>${row.playerName}</td>
-      <td>${row.gamesPlayed}</td>
-      <td>${row.gamesAsCrewmate}</td>
-      <td>${row.gamesAsImpostor}</td>
-      <td>${row.crewWins}</td>
-      <td>${row.impWins}</td>
-      <td>${formatRate(row.crewWinRate)}</td>
-      <td>${formatRate(row.impWinRate)}</td>
+      <td>${label}</td>
+      <td>${stat.gamesPlayed}</td>
+      <td>${formatRate(stat.crewWinRate)}</td>
+      <td>${formatRate(stat.impWinRate)}</td>
+      <td>${formatAverage(stat.avgKillsPerImpGame)}</td>
+      <td>${formatPercent(stat.survivalRate)}</td>
+      <td>${formatPercent(stat.taskCompletionRate)}</td>
     </tr>
   `).join('');
 }
 
+function renderTrendsPlayerOptions() {
+  const allPlayers = getAllPlayersRaw();
+  const players = Object.keys(allPlayers)
+    .filter((name) => !isPlayerExcluded(name, allPlayers[name]))
+    .sort((a, b) => a.localeCompare(b));
+
+  const current = state.trendsPlayerName;
+
+  elements.trendsPlayerSelect.innerHTML = [
+    '<option value="">Choose a player…</option>',
+    ...players.map((name) => `<option value="${name}">${name}</option>`)
+  ].join('');
+
+  if (current && players.includes(current)) {
+    elements.trendsPlayerSelect.value = current;
+  } else {
+    state.trendsPlayerName = null;
+    elements.trendsPlayerSelect.value = "";
+  }
+}
+
+function renderTrendsTable() {
+  if (!state.trendsPlayerName) {
+    elements.trendsTableBody.innerHTML = '<tr><td colspan="7" class="empty">Pick a player above to see their trend over time.</td></tr>';
+    return;
+  }
+
+  renderMonthlyTable(elements.trendsTableBody, state.trendsPlayerName, getFilteredEntries());
+}
+
+function renderLocationList(listEl, locationCounts) {
+  const top = topLocations(locationCounts, 5);
+
+  if (!top.length) {
+    listEl.innerHTML = '<li class="empty-list"></li>';
+    return;
+  }
+
+  listEl.innerHTML = top.map(([location, count]) => `
+    <li><span>${location}</span><span>${count}</span></li>
+  `).join('');
+}
+
+function openPlayerDetail(playerName) {
+
+  const stat = state.players[playerName];
+
+  if (!stat) {
+    return;
+  }
+
+  elements.playerDetailName.textContent = playerName;
+
+  const cards = [
+    ['Games', stat.gamesPlayed],
+    ['Crew Games', stat.gamesAsCrewmate],
+    ['Imp Games', stat.gamesAsImpostor],
+    ['Crew Win Rate', formatRate(stat.crewWinRate)],
+    ['Imp Win Rate', formatRate(stat.impWinRate)],
+    ['Kills', stat.kills],
+    ['Avg Kills / Imp Game', formatAverage(stat.avgKillsPerImpGame)],
+    ['Deaths', stat.deaths],
+    ['Survival Rate', formatPercent(stat.survivalRate)],
+    ['Ejected as Crew', stat.ejectionsAsCrew],
+    ['Ejected as Impostor', stat.ejectionsAsImpostor],
+    ['Task Completion', formatPercent(stat.taskCompletionRate)],
+    ['Task Wins', stat.taskWins],
+    ['Kill Wins', stat.killWins],
+    ['Vote Wins', stat.voteWins],
+    ['Votes Cast', stat.votesCast],
+    ['Votes Skipped', stat.votesSkipped],
+    ['Vote Accuracy', formatPercent(stat.voteAccuracy)],
+    ['Decisive Votes', stat.decisiveVotes]
+  ];
+
+  elements.playerDetailSummary.innerHTML = cards.map(([label, value]) => `
+    <article class="summary-card">
+      <span class="summary-label">${label}</span>
+      <strong>${value}</strong>
+    </article>
+  `).join('');
+
+  renderLocationList(elements.playerDetailKillLocations, stat.killLocations);
+  renderLocationList(elements.playerDetailDeathLocations, stat.deathLocations);
+
+  renderMonthlyTable(elements.playerDetailMonthlyBody, playerName, getFilteredEntries());
+
+  elements.playerDetailModal.classList.remove("hidden");
+
+}
+
+function closePlayerDetail() {
+  elements.playerDetailModal.classList.add("hidden");
+}
+
 function renderAll() {
-  console.log("renderPlayers exists:", typeof renderPlayers);
   state.search = elements.searchInput.value.trim().toLowerCase();
-  renderSummary();
-  renderGames();
+  state.categoryFilter = elements.categoryFilter.value;
+
+  const filteredEntries = getFilteredEntries();
+  state.players = aggregatePlayers(filteredEntries);
+
+  renderSummary(filteredEntries);
+  renderGames(filteredEntries);
   renderPlayers();
   renderPlayerManager();
+  renderTrendsPlayerOptions();
+  renderTrendsTable();
 }
 
 async function handleFiles(fileList) {
@@ -426,7 +866,8 @@ async function handleFiles(fileList) {
     return;
   }
 
-  const parsedEntries = [];
+  let addedCount = 0;
+  let retaggedCount = 0;
 
   for (const file of files) {
 
@@ -434,13 +875,30 @@ async function handleFiles(fileList) {
 
       const text = await file.text();
 
-      parsedEntries.push(
-        parseLogText(
-          text,
-          file.name,
-          getSelectedCategory()
-        )
+      const parsed = parseLogText(
+        text,
+        file.name,
+        getSelectedCategory()
       );
+
+      const existingIndex = state.entries.findIndex(
+        (entry) => entry.fileName === parsed.fileName
+      );
+
+      if (existingIndex === -1) {
+
+        state.entries.push(parsed);
+        addedCount += 1;
+
+      } else if (state.entries[existingIndex].category !== parsed.category) {
+
+        // Same file re-imported under a different tag: just retag it,
+        // don't duplicate it.
+        state.entries[existingIndex].category = parsed.category;
+        retaggedCount += 1;
+
+      }
+      // else: identical file, identical category - already imported, skip.
 
     } catch (err) {
 
@@ -450,24 +908,14 @@ async function handleFiles(fileList) {
 
   }
 
-  const newEntries = parsedEntries.filter(entry =>
-    !state.entries.some(existing =>
-        existing.gameId === entry.gameId
-    )
-);
-
-state.entries.push(...newEntries);
-
-  state.players = aggregatePlayers(state.entries);
-
   saveEntries(state.entries);
+
+  const allPlayers = sumPlayerStatsFromEntries(state.entries);
+
   for (
-
     const playerName
-
-    of Object.keys(state.players)
-
-) {
+    of Object.keys(allPlayers)
+  ) {
 
     addPlayer(
 
@@ -477,61 +925,86 @@ state.entries.push(...newEntries);
 
     );
 
-}
+  }
 
-savePlayerDatabase(
+  savePlayerDatabase(
 
-    state.playerDatabase
+      state.playerDatabase
 
-);
+  );
+
+  updateCategoryFilterOptions();
 
   renderAll();
+
+  if (addedCount || retaggedCount) {
+    console.log(`Imported ${addedCount} new game(s), retagged ${retaggedCount} game(s).`);
+  }
 
 }
 
 function bindEvents() {
-  
-if (elements.playerManagerButton) {
-    elements.playerManagerButton.onclick = openPlayerManager;
-}
 
-if (elements.closePlayerManager) {
-    elements.closePlayerManager.onclick = closePlayerManager;
-}
-
-if (elements.playerManagerModal) {
-    elements.playerManagerModal.onclick = (event) => {
-        if (event.target === elements.playerManagerModal) {
-            closePlayerManager();
-        }
-    };
-}
-
-if (elements.playerManagerSearch) {
-    elements.playerManagerSearch.oninput = () => {
-        state.playerManagerSearch = elements.playerManagerSearch.value;
-        renderPlayerManager();
-    };
-}
-
-elements.playerManagerModal.onclick = (event) => {
-
-  if (event.target === elements.playerManagerModal) {
-
-    closePlayerManager();
-
+  if (elements.playerNameHeader) {
+      elements.playerNameHeader.onclick = () => toggleSort('name');
   }
 
-};
+  if (elements.playerGamesHeader) {
+      elements.playerGamesHeader.onclick = () => toggleSort('games');
+  }
 
-elements.playerManagerSearch.oninput = () => {
+  if (elements.playerManagerButton) {
+      elements.playerManagerButton.onclick = openPlayerManager;
+  }
 
-  state.playerManagerSearch =
-      elements.playerManagerSearch.value;
+  if (elements.closePlayerManager) {
+      elements.closePlayerManager.onclick = closePlayerManager;
+  }
 
-  renderPlayerManager();
+  if (elements.playerManagerModal) {
+      elements.playerManagerModal.onclick = (event) => {
+          if (event.target === elements.playerManagerModal) {
+              closePlayerManager();
+          }
+      };
+  }
 
-};
+  if (elements.playerManagerSearch) {
+      elements.playerManagerSearch.oninput = () => {
+          state.playerManagerSearch = elements.playerManagerSearch.value;
+          renderPlayerManager();
+      };
+  }
+
+  if (elements.showHiddenCheckbox) {
+      elements.showHiddenCheckbox.onchange = () => {
+          state.playerManagerShowHidden = elements.showHiddenCheckbox.checked;
+          renderPlayerManager();
+      };
+  }
+
+  if (elements.closePlayerDetail) {
+      elements.closePlayerDetail.onclick = closePlayerDetail;
+  }
+
+  if (elements.playerDetailModal) {
+      elements.playerDetailModal.onclick = (event) => {
+          if (event.target === elements.playerDetailModal) {
+              closePlayerDetail();
+          }
+      };
+  }
+
+  if (elements.trendsPlayerSelect) {
+      elements.trendsPlayerSelect.onchange = () => {
+          state.trendsPlayerName = elements.trendsPlayerSelect.value || null;
+          renderTrendsTable();
+      };
+  }
+
+  if (elements.categoryFilter) {
+      elements.categoryFilter.onchange = renderAll;
+  }
 
   elements.chooseFilesButton.addEventListener("click", () => {
 
@@ -575,11 +1048,19 @@ elements.playerManagerSearch.oninput = () => {
 
   elements.clearButton.onclick = () => {
 
+    if (!confirm("Clear all saved game data? This can't be undone.")) {
+      return;
+    }
+
     localStorage.removeItem(STORAGE_KEY);
 
     state.entries = [];
 
     state.players = {};
+
+    state.trendsPlayerName = null;
+
+    updateCategoryFilterOptions();
 
     renderAll();
 
@@ -592,9 +1073,10 @@ function bootstrap() {
   state.playerSettings =
     loadPlayerSettings();
 
-state.entries =
-    loadStoredEntries();
-  state.players = aggregatePlayers(state.entries);
+  state.entries =
+      loadStoredEntries();
+
+  updateCategoryFilterOptions();
   bindEvents();
   renderAll();
 }

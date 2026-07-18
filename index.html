@@ -15,54 +15,48 @@
         </div>
       </header>
 
-<section class="drop-zone" id="dropZone">
+      <section class="drop-zone" id="dropZone">
 
-  <div class="import-options">
+        <div class="import-options">
 
-    <label for="categorySelect">Import As</label>
+          <label for="categorySelect">Import As</label>
 
-    <select id="categorySelect">
-      <option value="Casual">Casual</option>
-      <option value="Tournament">Tournament</option>
-    </select>
+          <select id="categorySelect">
+            <option value="Casual">Casual</option>
+            <option value="Tournament">Tournament</option>
+          </select>
 
-    <input
-      id="fileInput"
-      type="file"
-      multiple
-      accept=".log,.txt,text/plain"
-      hidden
-    />
+          <input
+            id="fileInput"
+            type="file"
+            multiple
+            accept=".log,.txt,text/plain"
+            hidden
+          />
 
-    <button
-      type="button"
-      id="chooseFilesButton"
-    >
-      Choose Files
-    </button>
+          <button
+            type="button"
+            id="chooseFilesButton"
+          >
+            Choose Files
+          </button>
 
-  </div>
+        </div>
 
-  <p>Drag files here or click the button to choose log files.</p>
+        <p>Drag files here or click the button to choose log files.</p>
+        <p class="hint">Re-importing a file you already loaded updates its category tag instead of duplicating it.</p>
 
-</section>
+      </section>
 
       <section class="toolbar">
         <label class="search-label" for="searchInput">Search</label>
         <input id="searchInput" type="search" placeholder="Search player, file, or winner" />
-        <button id="playerManagerButton" type="button">Player Manager</button>
-        <button
-class="alias-player"
-data-player="${player.name}"
->
-Alias
-</button>
-        <button id="clearButton" type="button">Clear saved data</button>
         <label for="categoryFilter">Category</label>
-
-<select id="categoryFilter">
-    <option value="All">All</option>
-</select>
+        <select id="categoryFilter">
+          <option value="All">All</option>
+        </select>
+        <button id="playerManagerButton" type="button">Player Manager</button>
+        <button id="clearButton" type="button">Clear saved data</button>
       </section>
 
       <section class="summary-grid">
@@ -96,14 +90,19 @@ Alias
           <table>
             <thead>
               <tr>
-                <th>Player</th>
-                <th>Games Played</th>
-                <th>Crewmate Games</th>
-                <th>Impostor Games</th>
+                <th id="playerNameHeader" class="sortable">Player</th>
+                <th id="playerGamesHeader" class="sortable">Games</th>
+                <th>Crew Games</th>
+                <th>Imp Games</th>
                 <th>Crew Wins</th>
                 <th>Imp Wins</th>
                 <th>Crew Win Rate</th>
                 <th>Imp Win Rate</th>
+                <th>Kills</th>
+                <th>Avg Kills / Imp Game</th>
+                <th>Survival Rate</th>
+                <th>Task Completion</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="playerTableBody"></tbody>
@@ -120,10 +119,11 @@ Alias
             <thead>
               <tr>
                 <th>Category</th>
+                <th>Date</th>
+                <th>Map</th>
                 <th>File</th>
-                <th>Games</th>
-                <th>Crew Wins</th>
-                <th>Imp Wins</th>
+                <th>Winner</th>
+                <th>Win Condition</th>
                 <th>Total Kills</th>
                 <th>Crew Deaths</th>
               </tr>
@@ -132,52 +132,115 @@ Alias
           </table>
         </div>
       </section>
+
+      <section class="table-section">
+        <div class="section-heading">
+          <h2>Monthly Trends</h2>
+        </div>
+        <div class="trends-controls">
+          <label for="trendsPlayerSelect">Player</label>
+          <select id="trendsPlayerSelect">
+            <option value="">Choose a player…</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Games</th>
+                <th>Crew Win Rate</th>
+                <th>Imp Win Rate</th>
+                <th>Avg Kills / Imp Game</th>
+                <th>Survival Rate</th>
+                <th>Task Completion</th>
+              </tr>
+            </thead>
+            <tbody id="trendsTableBody">
+              <tr><td colspan="7" class="empty">Pick a player above to see their trend over time.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
-<div id="playerManagerModal" class="modal hidden">
 
-  <div class="modal-content">
+    <div id="playerManagerModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Player Manager</h2>
+          <button id="closePlayerManager">&times;</button>
+        </div>
 
-    <div class="modal-header">
+        <input
+          id="playerManagerSearch"
+          type="search"
+          placeholder="Search players..."
+        />
 
-      <h2>Player Manager</h2>
+        <p class="hint">Players who've only ever appeared in one game are hidden from stats automatically. Check the box below to find and manage them.</p>
 
-      <button id="closePlayerManager">&times;</button>
+        <label class="show-hidden-toggle">
+          <input type="checkbox" id="showHiddenCheckbox" />
+          Show hidden &amp; one-off (1-game) players
+        </label>
 
+        <table class="manager-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Games</th>
+              <th>Aliases</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="playerManagerBody"></tbody>
+        </table>
+      </div>
     </div>
 
-    <input
-      id="playerManagerSearch"
-      type="search"
-      placeholder="Search players..."
-    />
+    <div id="playerDetailModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="playerDetailName">Player</h2>
+          <button id="closePlayerDetail">&times;</button>
+        </div>
 
-    <table class="manager-table">
+        <div class="summary-grid" id="playerDetailSummary"></div>
+        <p class="hint">"Vote Accuracy" = voted for someone who actually was an impostor, regardless of your own role. "Decisive Votes" = your vote's target was the one actually ejected.</p>
 
-      <thead>
+        <div class="detail-columns">
+          <div class="detail-column">
+            <h3>Favorite Kill Spots</h3>
+            <ul id="playerDetailKillLocations" class="location-list"></ul>
+          </div>
+          <div class="detail-column">
+            <h3>Most Common Death Spots</h3>
+            <ul id="playerDetailDeathLocations" class="location-list"></ul>
+          </div>
+        </div>
 
-        <tr>
-
-          <th>Player</th>
-          <th>Games</th>
-          <th>Actions</th>
-
-        </tr>
-
-      </thead>
-
-      <tbody id="playerManagerBody">
-
-      </tbody>
-
-    </table>
-
-  </div>
-
-</div>
+        <h3>Monthly Trend</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Games</th>
+                <th>Crew Win Rate</th>
+                <th>Imp Win Rate</th>
+                <th>Avg Kills / Imp Game</th>
+                <th>Survival Rate</th>
+                <th>Task Completion</th>
+              </tr>
+            </thead>
+            <tbody id="playerDetailMonthlyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
     <script src="js/storage.js"></script>
     <script src="js/playerStats.js"></script>
-    <script src="js/players.js"></script>
     <script src="js/playerDatabase.js"></script>
     <script src="js/parser.js"></script>
     <script src="app.js"></script>

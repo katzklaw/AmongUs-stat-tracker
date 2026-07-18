@@ -317,3 +317,131 @@ tbody tr:hover {
     color:white;
 
 }
+.hint {
+  font-size: 0.85rem;
+  color: #b9c6dd;
+  margin: 4px 0 0;
+}
+
+#categoryFilter {
+  background: #2c3148;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.details-button {
+  background: #4b8bf3;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.details-button:hover {
+  background: #6ea0f5;
+}
+
+.show-hidden-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+  color: #d7dfef;
+}
+
+.trends-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+#trendsPlayerSelect {
+  background: #2c3148;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-width: 200px;
+}
+
+.detail-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.detail-column h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: #d7dfef;
+}
+
+.location-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.location-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #1d2638;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.location-list li:empty::before,
+.location-list.empty-list::before {
+  content: "No data yet.";
+  color: #b9c6dd;
+  font-style: italic;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  color: #6ea0f5;
+}
+
+.alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #2c3148;
+  border-radius: 12px;
+  padding: 2px 8px;
+  margin: 2px;
+  font-size: 0.85rem;
+}
+
+.alias-chip .remove-alias {
+  background: none;
+  border: none;
+  color: #ff8080;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.alias-chip .remove-alias:hover {
+  color: #ff4d4d;
+}
+
+.no-aliases {
+  color: #6b7690;
+}
+
+.manager-table td {
+  vertical-align: top;
+}
