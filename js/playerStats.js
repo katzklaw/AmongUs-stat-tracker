@@ -61,37 +61,43 @@ function mergeLocationCounts(target, source) {
 }
 
 // Adds one game's player record (from parser.js) into a running aggregate.
+// `gameRecord` may come from an older, differently-shaped saved entry -
+// every field is defaulted so old/partial data contributes zero rather
+// than corrupting the running totals with NaN.
 function mergeGameRecordIntoAggregate(aggregate, gameRecord) {
-  aggregate.gamesPlayed += gameRecord.gamesPlayed;
-  aggregate.gamesAsCrewmate += gameRecord.gamesAsCrewmate;
-  aggregate.gamesAsImpostor += gameRecord.gamesAsImpostor;
-  aggregate.crewWins += gameRecord.crewWins;
-  aggregate.impWins += gameRecord.impWins;
+  const g = gameRecord || {};
+  const num = (value) => (typeof value === 'number' && !Number.isNaN(value) ? value : 0);
 
-  aggregate.kills += gameRecord.kills;
-  aggregate.deaths += gameRecord.died;
-  aggregate.ejections += gameRecord.wasEjected;
-  if (gameRecord.wasEjected) {
-    if (gameRecord.role === 'crewmate') aggregate.ejectionsAsCrew += 1;
+  aggregate.gamesPlayed += num(g.gamesPlayed);
+  aggregate.gamesAsCrewmate += num(g.gamesAsCrewmate);
+  aggregate.gamesAsImpostor += num(g.gamesAsImpostor);
+  aggregate.crewWins += num(g.crewWins);
+  aggregate.impWins += num(g.impWins);
+
+  aggregate.kills += num(g.kills);
+  aggregate.deaths += num(g.died);
+  aggregate.ejections += num(g.wasEjected);
+  if (g.wasEjected) {
+    if (g.role === 'crewmate') aggregate.ejectionsAsCrew += 1;
     else aggregate.ejectionsAsImpostor += 1;
   }
-  aggregate.survivedGames += gameRecord.survived;
-  aggregate.tasksCompletedGames += gameRecord.completedAllTasks;
+  aggregate.survivedGames += num(g.survived);
+  aggregate.tasksCompletedGames += num(g.completedAllTasks);
 
-  aggregate.taskWins += gameRecord.taskWins;
-  aggregate.killWins += gameRecord.killWins;
-  aggregate.voteWins += gameRecord.voteWins;
-  aggregate.sabotageWins += gameRecord.sabotageWins;
-  aggregate.otherWins += gameRecord.otherWins;
+  aggregate.taskWins += num(g.taskWins);
+  aggregate.killWins += num(g.killWins);
+  aggregate.voteWins += num(g.voteWins);
+  aggregate.sabotageWins += num(g.sabotageWins);
+  aggregate.otherWins += num(g.otherWins);
 
-  mergeLocationCounts(aggregate.killLocations, gameRecord.killLocations);
-  mergeLocationCounts(aggregate.deathLocations, gameRecord.deathLocations);
+  mergeLocationCounts(aggregate.killLocations, g.killLocations);
+  mergeLocationCounts(aggregate.deathLocations, g.deathLocations);
 
-  aggregate.votesCast += gameRecord.votesCast;
-  aggregate.votesSkipped += gameRecord.votesSkipped;
-  aggregate.correctVotes += gameRecord.correctVotes;
-  aggregate.incorrectVotes += gameRecord.incorrectVotes;
-  aggregate.decisiveVotes += gameRecord.decisiveVotes;
+  aggregate.votesCast += num(g.votesCast);
+  aggregate.votesSkipped += num(g.votesSkipped);
+  aggregate.correctVotes += num(g.correctVotes);
+  aggregate.incorrectVotes += num(g.incorrectVotes);
+  aggregate.decisiveVotes += num(g.decisiveVotes);
 }
 
 function finalizePlayerRates(playerStats) {

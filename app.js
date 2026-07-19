@@ -97,9 +97,15 @@ function sumPlayerStatsFromEntries(entries) {
 
   for (const entry of entries) {
 
-    for (const record of Object.values(entry.playerStats || {})) {
+    for (const [key, record] of Object.entries(entry.playerStats || {})) {
 
-      const originalName = record.displayName;
+      // Defends against stale localStorage data saved by an older version
+      // of this app, where player records didn't have a displayName field.
+      const originalName = record && record.displayName ? record.displayName : key;
+
+      if (!originalName) {
+        continue;
+      }
 
       const finalName =
         aliases[originalName.toLowerCase()] || originalName;
@@ -858,6 +864,54 @@ function renderAll() {
   renderTrendsTable();
 }
 
+// Identifies a game by its actual content, not its filename - so reused
+// filenames (e.g. "game 1.txt" reused across different tournaments) don't
+// falsely collide, and a genuinely re-uploaded file is still recognized
+// even if it got renamed in between.
+function computeGameFingerprint(entry) {
+
+  const players = Object.values(entry.playerStats || {})
+    .map((p) => (p.displayName || '').toLowerCase())
+    .sort()
+    .join(',');
+
+  // Every log starts with a timestamp down to the second, which is
+  // effectively a unique ID on its own for sequential games. The player
+  // roster is added too, in case two parallel lobbies (running at once
+  // in a tournament) happen to start in the very same second.
+  if (entry.date) {
+    return `${entry.date}|${entry.map || 'nomap'}|${players}`;
+  }
+
+  // Fallback for the rare file where a timestamp couldn't be parsed:
+  // fingerprint the actual game content instead.
+  const killsSig = (entry.kills || [])
+    .map((k) => `${(k.killer || '').toLowerCase()}>${(k.victim || '').toLowerCase()}@${(k.location || '').toLowerCase()}`)
+    .join(';');
+
+  const ejectionsSig = (entry.ejections || [])
+    .map((e) => `${(e.player || '').toLowerCase()}:${e.role || ''}`)
+    .join(';');
+
+  return [
+    'nodate',
+    entry.map || 'nomap',
+    entry.gameMode || 'nomode',
+    entry.winnerTeam || 'nowinner',
+    entry.winCondition || 'nocondition',
+    entry.totalKills,
+    entry.crewDeaths,
+    players,
+    killsSig,
+    ejectionsSig
+  ].join('|');
+
+}
+
+function getEntryFingerprint(entry) {
+  return entry.fingerprint || computeGameFingerprint(entry);
+}
+
 async function handleFiles(fileList) {
 
   const files = Array.from(fileList);
@@ -881,8 +935,10 @@ async function handleFiles(fileList) {
         getSelectedCategory()
       );
 
+      parsed.fingerprint = computeGameFingerprint(parsed);
+
       const existingIndex = state.entries.findIndex(
-        (entry) => entry.fileName === parsed.fileName
+        (entry) => getEntryFingerprint(entry) === parsed.fingerprint
       );
 
       if (existingIndex === -1) {
@@ -892,13 +948,15 @@ async function handleFiles(fileList) {
 
       } else if (state.entries[existingIndex].category !== parsed.category) {
 
-        // Same file re-imported under a different tag: just retag it,
-        // don't duplicate it.
+        // Same game re-imported under a different tag: just retag it,
+        // don't duplicate it. Keep the newer fileName too, in case it
+        // was re-exported/renamed since the last import.
         state.entries[existingIndex].category = parsed.category;
+        state.entries[existingIndex].fileName = parsed.fileName;
         retaggedCount += 1;
 
       }
-      // else: identical file, identical category - already imported, skip.
+      // else: identical game, identical category - already imported, skip.
 
     } catch (err) {
 
@@ -910,35 +968,44 @@ async function handleFiles(fileList) {
 
   saveEntries(state.entries);
 
-  const allPlayers = sumPlayerStatsFromEntries(state.entries);
+  try {
 
-  for (
-    const playerName
-    of Object.keys(allPlayers)
-  ) {
+    const allPlayers = sumPlayerStatsFromEntries(state.entries);
 
-    addPlayer(
+    for (
+      const playerName
+      of Object.keys(allPlayers)
+    ) {
 
-        state.playerDatabase,
+      addPlayer(
 
-        playerName
+          state.playerDatabase,
+
+          playerName
+
+      );
+
+    }
+
+    savePlayerDatabase(
+
+        state.playerDatabase
 
     );
 
-  }
+    updateCategoryFilterOptions();
 
-  savePlayerDatabase(
+    renderAll();
 
-      state.playerDatabase
+    if (addedCount || retaggedCount) {
+      console.log(`Imported ${addedCount} new game(s), retagged ${retaggedCount} game(s).`);
+    }
 
-  );
+  } catch (err) {
 
-  updateCategoryFilterOptions();
+    console.error("Import succeeded but updating the dashboard failed:", err);
+    alert("Your file(s) imported, but something went wrong updating the dashboard. Check the console and let Claude know what it says.");
 
-  renderAll();
-
-  if (addedCount || retaggedCount) {
-    console.log(`Imported ${addedCount} new game(s), retagged ${retaggedCount} game(s).`);
   }
 
 }
@@ -1078,7 +1145,18 @@ function bootstrap() {
 
   updateCategoryFilterOptions();
   bindEvents();
-  renderAll();
+
+  try {
+
+    renderAll();
+
+  } catch (err) {
+
+    console.error("Failed to render saved data - it may be from an older version of this app:", err);
+    alert("Something in your saved data couldn't be loaded (probably left over from an older version of this app). Open the console for details, or use \"Clear saved data\" to start fresh.");
+
+  }
+
 }
 
 bootstrap();

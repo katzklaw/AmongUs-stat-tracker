@@ -445,3 +445,38 @@ tbody tr:hover {
 .manager-table td {
   vertical-align: top;
 }
+
+.collapsible-section summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapsible-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-section summary h2 {
+  margin: 0;
+}
+
+.collapsible-section summary::before {
+  content: "▶";
+  font-size: 0.75rem;
+  color: #b9c6dd;
+  transition: transform 0.15s ease;
+}
+
+.collapsible-section[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.collapsible-section summary:hover h2 {
+  color: #6ea0f5;
+}
+
+.collapsible-section .table-wrap {
+  margin-top: 12px;
+}
