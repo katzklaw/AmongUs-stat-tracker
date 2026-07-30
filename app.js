@@ -823,6 +823,8 @@ function openPlayerDetail(playerName) {
     ['Task Wins', stat.taskWins],
     ['Kill Wins', stat.killWins],
     ['Vote Wins', stat.voteWins],
+    ['Sabotage Wins', stat.sabotageWins],
+    ['Other/Unrecognized Wins', stat.otherWins],
     ['Votes Cast', stat.votesCast],
     ['Votes Skipped', stat.votesSkipped],
     ['Vote Accuracy', formatPercent(stat.voteAccuracy)],

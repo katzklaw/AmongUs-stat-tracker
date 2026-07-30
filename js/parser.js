@@ -56,7 +56,7 @@ function normalizeWinCondition(rawCondition) {
   const c = String(rawCondition || '').toLowerCase();
   if (/task/.test(c)) return 'task';
   if (/kill/.test(c)) return 'kill';
-  if (/vote/.test(c)) return 'vote';
+  if (/vot/.test(c)) return 'vote'; // covers "vote", "voting", "voted"
   if (/sabotage|reactor|oxygen|meltdown/.test(c)) return 'sabotage';
   return 'other';
 }
@@ -329,7 +329,7 @@ function parseLogText(
     const normalized = trimmed.toLowerCase();
 
     // --- Winner line: "Winners: Crewmates by task win" / "Winners: Impostors by kill win" etc.
-    const winnerMatch = trimmed.match(/^winners?:?\s*(crewmates?|crew|impostors?|impostor team)\s*(?:by\s+(.+?)\s*win)?/i);
+    const winnerMatch = trimmed.match(/^winners?:?\s*(crewmates?|crew|impostors?|impostor team)\s*(?:by\s+(.+))?$/i);
     if (winnerMatch) {
       const winnerTeamRaw = winnerMatch[1].toLowerCase();
       const winnerTeam = /^crew/.test(winnerTeamRaw) ? 'crewmate' : 'impostor';
