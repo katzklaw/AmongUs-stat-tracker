@@ -1,41 +1,42 @@
 // js/playerDatabase.js
 
-const PLAYER_DB_KEY = "among-us-player-database";
+const PLAYER_DB_KEY = "among-us-player-database"; // legacy localStorage key
 
-function loadPlayerDatabase() {
+async function loadPlayerDatabase() {
 
-    const raw = localStorage.getItem(PLAYER_DB_KEY);
-
-    if (!raw) {
-
-        return {
-            nextId: 1,
-            players: {}
-        };
-
-    }
+    const fallback = { nextId: 1, players: {} };
 
     try {
 
-        return JSON.parse(raw);
+        const stored = await loadPlayerDatabaseRaw();
+        if (stored) {
+            return stored;
+        }
 
-    } catch {
+        // One-time migration from the old localStorage key, same idea as
+        // the entries/settings migration in storage.js.
+        const raw = localStorage.getItem(PLAYER_DB_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            await savePlayerDatabaseRaw(parsed);
+            localStorage.removeItem(PLAYER_DB_KEY);
+            return parsed;
+        }
 
-        return {
-            nextId: 1,
-            players: {}
-        };
+        return fallback;
+
+    } catch (err) {
+
+        console.error("Failed to load player database:", err);
+        return fallback;
 
     }
 
 }
 
-function savePlayerDatabase(database) {
+async function savePlayerDatabase(database) {
 
-    localStorage.setItem(
-        PLAYER_DB_KEY,
-        JSON.stringify(database)
-    );
+    await savePlayerDatabaseRaw(database);
 
 }
 

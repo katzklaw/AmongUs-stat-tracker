@@ -47,8 +47,7 @@ const state = {
 
     players: {},
 
-    playerDatabase:
-        loadPlayerDatabase(),
+    playerDatabase: { nextId: 1, players: {} }, // real value loaded async in bootstrap()
 
     search: "",
 
@@ -339,7 +338,7 @@ function renderAliasList() {
 
 }
 
-function createAlias(oldName, newName) {
+async function createAlias(oldName, newName) {
 
   oldName = oldName.trim();
   newName = newName.trim();
@@ -374,7 +373,7 @@ function createAlias(oldName, newName) {
 
   aliases[oldName.toLowerCase()] = finalName;
 
-  savePlayerSettings(state.playerSettings);
+  await savePlayerSettings(state.playerSettings);
 
   renderAll();
 
@@ -401,7 +400,7 @@ function getAliasesForPlayer(playerName) {
 
 }
 
-function removeAlias(alias) {
+async function removeAlias(alias) {
 
   if (!confirm(`Stop merging "${alias}" into its current name? Future imports of "${alias}" will show up as their own player again.`)) {
     return;
@@ -409,13 +408,13 @@ function removeAlias(alias) {
 
   delete state.playerSettings.aliases[alias.toLowerCase()];
 
-  savePlayerSettings(state.playerSettings);
+  await savePlayerSettings(state.playerSettings);
 
   renderAll();
 
 }
 
-function askForAlias(playerName) {
+async function askForAlias(playerName) {
 
   const newName = prompt(
 
@@ -437,7 +436,7 @@ function askForAlias(playerName) {
 
   }
 
-  createAlias(
+  await createAlias(
 
       playerName,
 
@@ -447,7 +446,7 @@ function askForAlias(playerName) {
 
 }
 
-function toggleHidden(playerName) {
+async function toggleHidden(playerName) {
 
   const key = playerName.toLowerCase();
   const hidden = state.playerSettings.hidden;
@@ -467,13 +466,13 @@ function toggleHidden(playerName) {
 
   }
 
-  savePlayerSettings(state.playerSettings);
+  await savePlayerSettings(state.playerSettings);
 
   renderAll();
 
 }
 
-function toggleKeepSingleGame(playerName) {
+async function toggleKeepSingleGame(playerName) {
 
   const key = playerName.toLowerCase();
   const kept = state.playerSettings.keepSingleGame;
@@ -485,7 +484,7 @@ function toggleKeepSingleGame(playerName) {
     kept.splice(idx, 1);
   }
 
-  savePlayerSettings(state.playerSettings);
+  await savePlayerSettings(state.playerSettings);
 
   renderAll();
 
@@ -988,6 +987,20 @@ async function handleFiles(fileList) {
   let addedCount = 0;
   let retaggedCount = 0;
 
+  // O(1) duplicate lookup instead of scanning the whole array per file -
+  // matters once you're at hundreds of games and importing folders at once.
+  if (!state.fingerprintIndex) {
+    state.fingerprintIndex = new Map();
+    for (const entry of state.entries) {
+      if (!entry.fingerprint) {
+        entry.fingerprint = computeGameFingerprint(entry);
+      }
+      state.fingerprintIndex.set(entry.fingerprint, entry);
+    }
+  }
+
+  const changedEntries = [];
+
   for (const file of files) {
 
     try {
@@ -1002,22 +1015,23 @@ async function handleFiles(fileList) {
 
       parsed.fingerprint = computeGameFingerprint(parsed);
 
-      const existingIndex = state.entries.findIndex(
-        (entry) => getEntryFingerprint(entry) === parsed.fingerprint
-      );
+      const existing = state.fingerprintIndex.get(parsed.fingerprint);
 
-      if (existingIndex === -1) {
+      if (!existing) {
 
         state.entries.push(parsed);
+        state.fingerprintIndex.set(parsed.fingerprint, parsed);
+        changedEntries.push(parsed);
         addedCount += 1;
 
-      } else if (state.entries[existingIndex].category !== parsed.category) {
+      } else if (existing.category !== parsed.category) {
 
         // Same game re-imported under a different tag: just retag it,
         // don't duplicate it. Keep the newer fileName too, in case it
         // was re-exported/renamed since the last import.
-        state.entries[existingIndex].category = parsed.category;
-        state.entries[existingIndex].fileName = parsed.fileName;
+        existing.category = parsed.category;
+        existing.fileName = parsed.fileName;
+        changedEntries.push(existing);
         retaggedCount += 1;
 
       }
@@ -1031,7 +1045,20 @@ async function handleFiles(fileList) {
 
   }
 
-  saveEntries(state.entries);
+  if (changedEntries.length) {
+
+    try {
+
+      await saveEntries(changedEntries);
+
+    } catch (err) {
+
+      console.error("Failed to save imported games:", err);
+      alert(`Your file(s) were parsed, but saving them failed: ${err && err.message ? err.message : err}\n\nThey're visible for this session but won't persist after a refresh unless this is resolved.`);
+
+    }
+
+  }
 
   try {
 
@@ -1052,7 +1079,7 @@ async function handleFiles(fileList) {
 
     }
 
-    savePlayerDatabase(
+    await savePlayerDatabase(
 
         state.playerDatabase
 
@@ -1183,6 +1210,7 @@ function bindEvents() {
 
   elements.dropZone.ondragenter = (event) => {
 
+    console.log("[drag-drop] dragenter fired");
     event.preventDefault();
 
     elements.dropZone.classList.add("dragover");
@@ -1199,36 +1227,70 @@ function bindEvents() {
 
   elements.dropZone.ondragleave = () => {
 
+    console.log("[drag-drop] dragleave fired");
     elements.dropZone.classList.remove("dragover");
 
   };
 
   elements.dropZone.ondrop = async (event) => {
 
+    console.log("[drag-drop] drop fired");
     event.preventDefault();
 
     elements.dropZone.classList.remove("dragover");
 
-    const files = await collectFilesFromDrop(event.dataTransfer);
-    await handleFiles(files);
+    try {
+
+      console.log("[drag-drop] dataTransfer.items:", event.dataTransfer.items ? event.dataTransfer.items.length : "none",
+        "| dataTransfer.files:", event.dataTransfer.files ? event.dataTransfer.files.length : "none");
+
+      const files = await collectFilesFromDrop(event.dataTransfer);
+
+      console.log("[drag-drop] collected", files.length, "file(s) after walking any folders:", files.map((f) => f.name));
+
+      if (files.length === 0) {
+        alert("Nothing usable was found in what you dropped. Check the console (F12) for [drag-drop] log lines and let Claude know what they say.");
+        return;
+      }
+
+      await handleFiles(files);
+
+    } catch (err) {
+
+      console.error("[drag-drop] failed:", err);
+      alert(`Drag-and-drop failed: ${err && err.message ? err.message : err}\n\nThe "Choose Files" / "Choose Folder" buttons still work as a reliable fallback. Check the console (F12) for [drag-drop] log lines and let Claude know what they say.`);
+
+    }
 
   };
 
   elements.searchInput.oninput = renderAll;
 
-  elements.clearButton.onclick = () => {
+  elements.clearButton.onclick = async () => {
 
     if (!confirm("Clear all saved game data? This can't be undone.")) {
       return;
     }
 
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+
+      await deleteAllEntries();
+
+    } catch (err) {
+
+      console.error("Failed to clear saved games:", err);
+      alert("Something went wrong clearing saved data. Check the console for details.");
+      return;
+
+    }
 
     state.entries = [];
 
     state.players = {};
 
     state.trendsPlayerName = null;
+
+    state.fingerprintIndex = null;
 
     updateCategoryFilterOptions();
 
@@ -1239,12 +1301,23 @@ function bindEvents() {
 }
 
 
-function bootstrap() {
-  state.playerSettings =
-    loadPlayerSettings();
+async function bootstrap() {
 
-  state.entries =
-      loadStoredEntries();
+  try {
+
+    state.playerSettings = await loadPlayerSettings();
+    state.entries = await loadStoredEntries();
+    state.playerDatabase = await loadPlayerDatabase();
+
+  } catch (err) {
+
+    console.error("Failed to load saved data:", err);
+    alert("Couldn't load your saved data. Open the console for details - your games and settings may still be intact in browser storage.");
+
+    state.playerSettings = state.playerSettings || { aliases: {}, hidden: [], keepSingleGame: [] };
+    state.entries = state.entries || [];
+
+  }
 
   updateCategoryFilterOptions();
   bindEvents();
