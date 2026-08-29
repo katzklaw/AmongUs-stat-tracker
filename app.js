@@ -3,6 +3,7 @@ const elements = {
 
   dropZone: document.getElementById('dropZone'),
   fileInput: document.getElementById('fileInput'),
+  folderInput: document.getElementById('folderInput'),
   searchInput: document.getElementById('searchInput'),
   clearButton: document.getElementById('clearButton'),
   gameTableBody: document.getElementById('gameTableBody'),
@@ -15,6 +16,7 @@ const elements = {
   categorySelect: document.getElementById('categorySelect'),
   categoryFilter: document.getElementById('categoryFilter'),
   chooseFilesButton: document.getElementById('chooseFilesButton'),
+  chooseFolderButton: document.getElementById('chooseFolderButton'),
   playerManagerButton: document.getElementById('playerManagerButton'),
   playerManagerModal: document.getElementById('playerManagerModal'),
   closePlayerManager: document.getElementById('closePlayerManager'),
@@ -820,6 +822,7 @@ function openPlayerDetail(playerName) {
     ['Ejected as Crew', stat.ejectionsAsCrew],
     ['Ejected as Impostor', stat.ejectionsAsImpostor],
     ['Task Completion', formatPercent(stat.taskCompletionRate)],
+    ['Exact Task Completion', stat.exactTaskCompletionRate === null ? 'No data yet' : formatPercent(stat.exactTaskCompletionRate)],
     ['Task Wins', stat.taskWins],
     ['Kill Wins', stat.killWins],
     ['Vote Wins', stat.voteWins],
@@ -914,9 +917,69 @@ function getEntryFingerprint(entry) {
   return entry.fingerprint || computeGameFingerprint(entry);
 }
 
+// Folders can contain anything (README files, .git internals, images) -
+// only try to parse things that look like a log. Doesn't apply to files
+// chosen via the file picker, which the OS already filters by accept=.
+function looksLikeLogFile(file) {
+  return /\.(txt|log)$/i.test(file.name);
+}
+
+// A dropped folder arrives as DataTransferItems, not Files - this walks
+// it (and any subfolders) recursively to collect every actual File.
+function walkFileEntry(entry, out) {
+  return new Promise((resolve, reject) => {
+    if (entry.isFile) {
+      entry.file((file) => {
+        out.push(file);
+        resolve();
+      }, reject);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const readBatch = () => {
+        reader.readEntries((batch) => {
+          if (!batch.length) {
+            resolve();
+            return;
+          }
+          // readEntries() can require multiple calls for large folders.
+          Promise.all(batch.map((child) => walkFileEntry(child, out)))
+            .then(readBatch)
+            .catch(reject);
+        }, reject);
+      };
+      readBatch();
+    } else {
+      resolve();
+    }
+  });
+}
+
+async function collectFilesFromDrop(dataTransfer) {
+  const items = dataTransfer.items;
+
+  if (!items || !items.length || !items[0].webkitGetAsEntry) {
+    // Fallback for browsers without the entry API - plain files still work,
+    // dropped folders just won't expand.
+    return Array.from(dataTransfer.files || []);
+  }
+
+  const entries = Array.from(items)
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.webkitGetAsEntry())
+    .filter(Boolean);
+
+  if (!entries.length) {
+    return Array.from(dataTransfer.files || []);
+  }
+
+  const files = [];
+  await Promise.all(entries.map((entry) => walkFileEntry(entry, files)));
+  return files;
+}
+
 async function handleFiles(fileList) {
 
-  const files = Array.from(fileList);
+  const files = Array.from(fileList).filter(looksLikeLogFile);
 
   if (files.length === 0) {
     return;
@@ -1014,6 +1077,19 @@ async function handleFiles(fileList) {
 
 function bindEvents() {
 
+  // Without this, dropping a file anywhere on the page OUTSIDE the exact
+  // drop zone makes the browser navigate away to open that file directly -
+  // which looks like "drag and drop is broken" since it can trigger from
+  // being a few pixels off, and gets more likely whenever the page layout
+  // shifts (new sections, columns, etc).
+  window.addEventListener("dragover", (event) => {
+    event.preventDefault();
+  });
+
+  window.addEventListener("drop", (event) => {
+    event.preventDefault();
+  });
+
   if (elements.playerNameHeader) {
       elements.playerNameHeader.onclick = () => toggleSort('name');
   }
@@ -1081,11 +1157,35 @@ function bindEvents() {
 
   });
 
+  if (elements.chooseFolderButton && elements.folderInput) {
+      elements.chooseFolderButton.addEventListener("click", () => {
+
+        elements.folderInput.click();
+
+      });
+
+      elements.folderInput.onchange = async (event) => {
+
+        await handleFiles(event.target.files);
+
+        event.target.value = "";
+
+      };
+  }
+
   elements.fileInput.onchange = async (event) => {
 
     await handleFiles(event.target.files);
 
     event.target.value = "";
+
+  };
+
+  elements.dropZone.ondragenter = (event) => {
+
+    event.preventDefault();
+
+    elements.dropZone.classList.add("dragover");
 
   };
 
@@ -1109,7 +1209,8 @@ function bindEvents() {
 
     elements.dropZone.classList.remove("dragover");
 
-    await handleFiles(event.dataTransfer.files);
+    const files = await collectFilesFromDrop(event.dataTransfer);
+    await handleFiles(files);
 
   };
 

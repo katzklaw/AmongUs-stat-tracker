@@ -86,7 +86,9 @@ function createEmptyPlayerGameRecord(displayName, role) {
     votesSkipped: 0,    // meetings where they skipped/didn't vote
     correctVotes: 0,    // voted for someone who actually was an impostor
     incorrectVotes: 0,  // voted for someone who actually was crew
-    decisiveVotes: 0    // their vote's target was the one actually ejected
+    decisiveVotes: 0,   // their vote's target was the one actually ejected
+    tasksDone: null,    // exact task fraction, only present in newer logs
+    tasksTotal: null    // that include an end-of-game "Task Completion:" block
   };
 }
 
@@ -122,6 +124,7 @@ function parseLogText(
   const seenDeaths = new Set();
   const playerRecords = new Map(); // lowercase name -> per-game player record
   let inRolesSection = false;
+  let inTaskCompletionSection = false;
   let winnerRecorded = false;
 
   const normalizeName = (name) => {
@@ -138,7 +141,7 @@ function parseLogText(
   };
 
   const normalizeRole = (role = '') => String(role).trim().toLowerCase();
-  const crewRoles = new Set(['crewmate', 'crew', 'engineer', 'scientist', 'tracker', 'detective', 'noisemaker', 'host']);
+  const crewRoles = new Set(['crewmate', 'crew', 'engineer', 'scientist', 'tracker', 'detective', 'noisemaker', 'host', 'judge']);
   const impostorRoles = new Set(['impostor', 'viper', 'shapeshifter', 'phantom']);
   const isImpostorRole = (role = '') => impostorRoles.has(normalizeRole(role));
   const isCrewLikeRole = (role = '') => crewRoles.has(normalizeRole(role)) || !isImpostorRole(role);
@@ -312,6 +315,15 @@ function parseLogText(
         const playerRole = roleMatch[3].trim().toLowerCase();
         roles.set(playerName.toLowerCase(), playerRole);
 
+        // Every other lookup against `roles` goes through normalizeName()
+        // first, which applies alias merges - so if this player has been
+        // merged to a different display name, index the role under that
+        // name too, or those lookups silently miss and misclassify them.
+        const aliasedKey = normalizeName(playerName).toLowerCase();
+        if (aliasedKey !== playerName.toLowerCase()) {
+          roles.set(aliasedKey, playerRole);
+        }
+
         const record = getPlayerRecord(playerName);
         if (record) {
           record.role = isCrewLikeRole(playerRole) ? 'crewmate' : 'impostor';
@@ -323,6 +335,27 @@ function parseLogText(
 
       if (/^\[/.test(trimmed)) {
         inRolesSection = false;
+      }
+    }
+
+    if (/^Task Completion:?$/i.test(trimmed)) {
+      inTaskCompletionSection = true;
+      continue;
+    }
+
+    if (inTaskCompletionSection) {
+      const taskCompletionMatch = trimmed.match(/^(.+?) \(([^)]+)\)\s+(\d+)\s*\/\s*(\d+)$/);
+      if (taskCompletionMatch) {
+        const record = getPlayerRecord(taskCompletionMatch[1]);
+        if (record) {
+          record.tasksDone = Number(taskCompletionMatch[3]);
+          record.tasksTotal = Number(taskCompletionMatch[4]);
+        }
+        continue;
+      }
+
+      if (/^\[/.test(trimmed)) {
+        inTaskCompletionSection = false;
       }
     }
 

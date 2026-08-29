@@ -36,12 +36,17 @@ function createEmptyAggregateStats(displayName) {
     incorrectVotes: 0,
     decisiveVotes: 0,
 
+    tasksDoneSum: 0,     // exact task fractions, only from newer-format logs
+    tasksTotalSum: 0,
+    gamesWithTaskData: 0,
+
     // filled in by finalizePlayerRates:
     crewWinRate: 0,
     impWinRate: 0,
     avgKillsPerImpGame: 0,
     survivalRate: 0,
     taskCompletionRate: 0,
+    exactTaskCompletionRate: null,
     ejectionRateAsCrew: 0,
     ejectionRateAsImpostor: 0,
     voteAccuracy: 0,
@@ -98,6 +103,13 @@ function mergeGameRecordIntoAggregate(aggregate, gameRecord) {
   aggregate.correctVotes += num(g.correctVotes);
   aggregate.incorrectVotes += num(g.incorrectVotes);
   aggregate.decisiveVotes += num(g.decisiveVotes);
+
+  // Only newer-format logs have this - older games simply don't contribute.
+  if (typeof g.tasksDone === 'number' && typeof g.tasksTotal === 'number' && g.tasksTotal > 0) {
+    aggregate.tasksDoneSum += g.tasksDone;
+    aggregate.tasksTotalSum += g.tasksTotal;
+    aggregate.gamesWithTaskData += 1;
+  }
 }
 
 function finalizePlayerRates(playerStats) {
@@ -111,6 +123,7 @@ function finalizePlayerRates(playerStats) {
     stat.ejectionRateAsImpostor = stat.gamesAsImpostor ? stat.ejectionsAsImpostor / stat.gamesAsImpostor : 0;
     stat.voteAccuracy = stat.votesCast ? stat.correctVotes / stat.votesCast : 0;
     stat.decisiveVoteRate = stat.votesCast ? stat.decisiveVotes / stat.votesCast : 0;
+    stat.exactTaskCompletionRate = stat.tasksTotalSum ? stat.tasksDoneSum / stat.tasksTotalSum : null;
   }
 
   return playerStats;

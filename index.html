@@ -34,6 +34,15 @@
             hidden
           />
 
+          <input
+            id="folderInput"
+            type="file"
+            webkitdirectory
+            directory
+            multiple
+            hidden
+          />
+
           <button
             type="button"
             id="chooseFilesButton"
@@ -41,10 +50,17 @@
             Choose Files
           </button>
 
+          <button
+            type="button"
+            id="chooseFolderButton"
+          >
+            Choose Folder
+          </button>
+
         </div>
 
-        <p>Drag files here or click the button to choose log files.</p>
-        <p class="hint">Re-importing a file you already loaded updates its category tag instead of duplicating it.</p>
+        <p>Drag files (or a whole folder) here, or use the buttons to choose them.</p>
+        <p class="hint">Re-importing a file you already loaded updates its category tag instead of duplicating it. Choosing/dropping a folder pulls in every log inside it, including subfolders.</p>
 
       </section>
 
@@ -206,7 +222,7 @@
         </div>
 
         <div class="summary-grid" id="playerDetailSummary"></div>
-        <p class="hint">"Vote Accuracy" = voted for someone who actually was an impostor, regardless of your own role. "Decisive Votes" = your vote's target was the one actually ejected.</p>
+        <p class="hint">"Vote Accuracy" = voted for someone who actually was an impostor, regardless of your own role. "Decisive Votes" = your vote's target was the one actually ejected. "Task Completion" counts games where you finished 100% of tasks; "Exact Task Completion" is your true average % done, but only available for games logged in the newer format that records it.</p>
 
         <div class="detail-columns">
           <div class="detail-column">

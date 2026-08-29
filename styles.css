@@ -171,7 +171,8 @@ tbody tr:hover {
   padding: 6px 10px;
 }
 
-#chooseFilesButton {
+#chooseFilesButton,
+#chooseFolderButton {
   background: #5c6bc0;
   color: white;
   border: none;
@@ -181,7 +182,8 @@ tbody tr:hover {
   font-weight: bold;
 }
 
-#chooseFilesButton:hover {
+#chooseFilesButton:hover,
+#chooseFolderButton:hover {
   background: #7385e6;
 }
 .modal {
