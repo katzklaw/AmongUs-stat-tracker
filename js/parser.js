@@ -166,15 +166,17 @@ function parseLogText(
   };
 
   const recordWinnerForPlayers = (winnerTeam, winCondition) => {
-    for (const [playerKey, playerRole] of roles.entries()) {
-      const playerRecord = getPlayerRecord(playerKey);
-      if (!playerRecord) {
-        continue;
-      }
+    // Iterate playerRecords, not roles - roles is intentionally indexed
+    // under both a player's raw per-game name AND their alias-resolved
+    // name (so vote/death/ejection lookups work either way), which means
+    // an aliased player appears twice in roles.entries(). playerRecords
+    // is always keyed by the final resolved identity, so each real player
+    // appears exactly once here regardless of aliasing.
+    for (const playerRecord of playerRecords.values()) {
 
       const isWinningTeam =
-        (winnerTeam === 'crewmate' && isCrewLikeRole(playerRole)) ||
-        (winnerTeam === 'impostor' && isImpostorRole(playerRole));
+        (winnerTeam === 'crewmate' && playerRecord.role === 'crewmate') ||
+        (winnerTeam === 'impostor' && playerRecord.role === 'impostor');
 
       if (!isWinningTeam) {
         continue;
