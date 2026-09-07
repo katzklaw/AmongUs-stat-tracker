@@ -87,6 +87,9 @@ function createEmptyPlayerGameRecord(displayName, role) {
     correctVotes: 0,    // voted for someone who actually was an impostor
     incorrectVotes: 0,  // voted for someone who actually was crew
     decisiveVotes: 0,   // their vote's target was the one actually ejected
+    votesCastAsCrew: 0,      // subset of votesCast where the voter was crew
+    correctVotesAsCrew: 0,   // subset of correctVotes where the voter was crew
+    incorrectVotesAsCrew: 0, // subset of incorrectVotes where the voter was crew
     tasksDone: null,    // exact task fraction, only present in newer logs
     tasksTotal: null    // that include an end-of-game "Task Completion:" block
   };
@@ -251,10 +254,27 @@ function parseLogText(
     voterRecord.votesCast += 1;
 
     const targetRole = roles.get(targetKey);
-    if (targetRole && isImpostorRole(targetRole)) {
+    const isCorrect = Boolean(targetRole && isImpostorRole(targetRole));
+
+    if (isCorrect) {
       voterRecord.correctVotes += 1;
     } else {
       voterRecord.incorrectVotes += 1;
+    }
+
+    // Vote Accuracy should only reflect reads made while actually on the
+    // crew team - an impostor "correctly" voting for their own teammate
+    // isn't a meaningful signal of reading the room.
+    const voterRole = roles.get(voter.toLowerCase());
+    const voterIsCrew = voterRole ? isCrewLikeRole(voterRole) : true;
+
+    if (voterIsCrew) {
+      voterRecord.votesCastAsCrew += 1;
+      if (isCorrect) {
+        voterRecord.correctVotesAsCrew += 1;
+      } else {
+        voterRecord.incorrectVotesAsCrew += 1;
+      }
     }
 
     pendingMeetingVotes.push({ record: voterRecord, targetKey });

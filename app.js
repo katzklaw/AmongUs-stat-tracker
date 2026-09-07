@@ -283,6 +283,23 @@ function renderPlayers() {
   updatePlayerTableHeaders();
 
   if (filtered.length === 0) {
+
+    // playerRows came from state.players (already hidden/auto-hidden
+    // filtered) - if games exist for the current filter but produced zero
+    // rows even before searching, every player in them is currently
+    // hidden. Worth saying explicitly, since an unqualified "no players"
+    // message looks like a bug rather than the auto-hide feature working.
+    if (playerRows.length === 0 && getFilteredEntries().length > 0) {
+
+      const rawCount = Object.keys(sumPlayerStatsFromEntries(getFilteredEntries())).length;
+
+      if (rawCount > 0) {
+        elements.playerTableBody.innerHTML = `<tr><td colspan="13" class="empty">All ${rawCount} player(s) in these games are currently hidden - most likely auto-hidden because they've only appeared in 1 game so far. Open Player Manager and check "Show hidden &amp; one-off players" to view or restore them.</td></tr>`;
+        return;
+      }
+
+    }
+
     elements.playerTableBody.innerHTML = '<tr><td colspan="13" class="empty">No matching players yet.</td></tr>';
     return;
   }
@@ -829,7 +846,8 @@ function openPlayerDetail(playerName) {
     ['Other/Unrecognized Wins', stat.otherWins],
     ['Votes Cast', stat.votesCast],
     ['Votes Skipped', stat.votesSkipped],
-    ['Vote Accuracy', formatPercent(stat.voteAccuracy)],
+    ['Votes Cast as Crew', stat.votesCastAsCrew],
+    ['Vote Accuracy (as Crew)', formatPercent(stat.voteAccuracy)],
     ['Decisive Votes', stat.decisiveVotes]
   ];
 

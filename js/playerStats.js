@@ -35,6 +35,9 @@ function createEmptyAggregateStats(displayName) {
     correctVotes: 0,
     incorrectVotes: 0,
     decisiveVotes: 0,
+    votesCastAsCrew: 0,
+    correctVotesAsCrew: 0,
+    incorrectVotesAsCrew: 0,
 
     tasksDoneSum: 0,     // exact task fractions, only from newer-format logs
     tasksTotalSum: 0,
@@ -103,6 +106,9 @@ function mergeGameRecordIntoAggregate(aggregate, gameRecord) {
   aggregate.correctVotes += num(g.correctVotes);
   aggregate.incorrectVotes += num(g.incorrectVotes);
   aggregate.decisiveVotes += num(g.decisiveVotes);
+  aggregate.votesCastAsCrew += num(g.votesCastAsCrew);
+  aggregate.correctVotesAsCrew += num(g.correctVotesAsCrew);
+  aggregate.incorrectVotesAsCrew += num(g.incorrectVotesAsCrew);
 
   // Only newer-format logs have this - older games simply don't contribute.
   if (typeof g.tasksDone === 'number' && typeof g.tasksTotal === 'number' && g.tasksTotal > 0) {
@@ -121,7 +127,7 @@ function finalizePlayerRates(playerStats) {
     stat.taskCompletionRate = stat.gamesPlayed ? stat.tasksCompletedGames / stat.gamesPlayed : 0;
     stat.ejectionRateAsCrew = stat.gamesAsCrewmate ? stat.ejectionsAsCrew / stat.gamesAsCrewmate : 0;
     stat.ejectionRateAsImpostor = stat.gamesAsImpostor ? stat.ejectionsAsImpostor / stat.gamesAsImpostor : 0;
-    stat.voteAccuracy = stat.votesCast ? stat.correctVotes / stat.votesCast : 0;
+    stat.voteAccuracy = stat.votesCastAsCrew ? stat.correctVotesAsCrew / stat.votesCastAsCrew : 0;
     stat.decisiveVoteRate = stat.votesCast ? stat.decisiveVotes / stat.votesCast : 0;
     stat.exactTaskCompletionRate = stat.tasksTotalSum ? stat.tasksDoneSum / stat.tasksTotalSum : null;
   }
