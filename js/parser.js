@@ -3,6 +3,14 @@
 // Turns one raw Among Us game log (from Twix's GameLogger) into a rich
 // "game record" object. This is the only file that reads raw log text -
 // everything downstream (app.js) just works with the structured object
+
+// The logger mod started recording votes in the order they were actually
+// cast starting around this date - before it, votes were listed in ID
+// order instead, which makes it impossible to reliably tell who voted
+// first. Games logged before this date have their Shadow Vote credit
+// zeroed out so they don't skew Shadow Vote Rate. Adjust this if the log
+// format changes again.
+const SHADOW_VOTE_TRACKING_CUTOFF = new Date('2026-08-18T00:00:00');
 // this returns.
 
 function normalizeLocationKey(rawLocation) {
@@ -90,6 +98,8 @@ function createEmptyPlayerGameRecord(displayName, role) {
     votesCastAsCrew: 0,      // subset of votesCast where the voter was crew
     correctVotesAsCrew: 0,   // subset of correctVotes where the voter was crew
     incorrectVotesAsCrew: 0, // subset of incorrectVotes where the voter was crew
+    shadowVotes: 0,          // first-to-correctly-vote-this-impostor credits earned
+    shadowVoteEligible: 0,   // 1 if this game's log is trustworthy enough for Shadow Vote tracking
     tasksDone: null,    // exact task fraction, only present in newer logs
     tasksTotal: null    // that include an end-of-game "Task Completion:" block
   };
@@ -129,6 +139,25 @@ function parseLogText(
   let inRolesSection = false;
   let inTaskCompletionSection = false;
   let winnerRecorded = false;
+
+  // Tracks how many players are still active in the round, for the Shadow
+  // Vote rule ("only while 7+ people are alive"). Decremented once per
+  // player on their first removal from the game, whichever comes first:
+  // killed, ejected, or disconnected.
+  let aliveCount = 0;
+  const removedFromGame = new Set();
+  // Once a specific impostor has been correctly identified by a crew vote
+  // (under qualifying conditions), no one else can earn Shadow Vote credit
+  // for that same impostor for the rest of the game.
+  const shadowVoteCreditedImpostors = new Set();
+
+  const markRemovedFromGame = (key) => {
+    if (!key || removedFromGame.has(key)) {
+      return;
+    }
+    removedFromGame.add(key);
+    aliveCount = Math.max(0, aliveCount - 1);
+  };
 
   const normalizeName = (name) => {
     let cleaned = String(name || "")
@@ -211,6 +240,7 @@ function parseLogText(
       stats.crewDeaths += 1;
     }
     seenDeaths.add(key);
+    markRemovedFromGame(key);
 
     const record = getPlayerRecord(cleaned);
     if (record) {
@@ -232,6 +262,7 @@ function parseLogText(
 
     const role = roles.get(key) || '';
     stats.ejections.push({ player: cleaned, role: isImpostorRole(role) ? 'impostor' : 'crewmate' });
+    markRemovedFromGame(key);
 
     const record = getPlayerRecord(cleaned);
     if (record) {
@@ -277,6 +308,15 @@ function parseLogText(
       } else {
         voterRecord.incorrectVotesAsCrew += 1;
       }
+    }
+
+    // Shadow Vote: credit to the FIRST crewmate (in the order votes were
+    // actually cast) to correctly vote for THIS specific impostor, but
+    // only while 7+ players are still active - and only once per impostor
+    // per game, no matter how many people later also vote them correctly.
+    if (voterIsCrew && isCorrect && aliveCount >= 7 && !shadowVoteCreditedImpostors.has(targetKey)) {
+      shadowVoteCreditedImpostors.add(targetKey);
+      voterRecord.shadowVotes += 1;
     }
 
     pendingMeetingVotes.push({ record: voterRecord, targetKey });
@@ -352,6 +392,8 @@ function parseLogText(
           record.gamesAsCrewmate = record.role === 'crewmate' ? 1 : 0;
           record.gamesAsImpostor = record.role === 'impostor' ? 1 : 0;
         }
+
+        aliveCount += 1;
         continue;
       }
 
@@ -449,6 +491,14 @@ function parseLogText(
       continue;
     }
 
+    // --- Disconnects (counts as leaving the active round for alive-count purposes)
+    const disconnectMatch = trimmed.match(/^(.+?)\s*(?:\([^)]+\))?\s+disconnected$/i);
+    if (disconnectMatch) {
+      const key = normalizeName(disconnectMatch[1]).toLowerCase();
+      markRemovedFromGame(key);
+      continue;
+    }
+
     // --- Ejections / votes
     const ejectedMatch = trimmed.match(/^(.+?)\s*(?:\([^)]+\))?\s+(?:was ejected|was voted out)\b/i);
     if (ejectedMatch) {
@@ -506,6 +556,27 @@ function parseLogText(
     playerStatsOut[key] = record;
   }
   stats.playerStats = playerStatsOut;
+
+  // Shadow Vote credit depends on knowing the true order votes were cast
+  // in - not reliable before the logger started recording that. Treat an
+  // unparseable date the same as "too old", to be conservative rather
+  // than risk crediting a game we can't actually verify.
+  const gameDateObj = stats.date ? new Date(stats.date) : null;
+  const shadowVoteTrackingEligible = Boolean(gameDateObj && gameDateObj >= SHADOW_VOTE_TRACKING_CUTOFF);
+
+  if (!shadowVoteTrackingEligible) {
+    for (const record of playerRecords.values()) {
+      record.shadowVotes = 0;
+    }
+  }
+
+  // Also mark eligibility on each record, so the aggregate denominator
+  // (crew games where a Shadow Vote was even possible) excludes pre-cutoff
+  // games too - otherwise those games would still count against the rate
+  // despite never being able to contribute a Shadow Vote.
+  for (const record of playerRecords.values()) {
+    record.shadowVoteEligible = shadowVoteTrackingEligible ? 1 : 0;
+  }
 
   return stats;
 }

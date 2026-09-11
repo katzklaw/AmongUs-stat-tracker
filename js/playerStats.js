@@ -38,6 +38,9 @@ function createEmptyAggregateStats(displayName) {
     votesCastAsCrew: 0,
     correctVotesAsCrew: 0,
     incorrectVotesAsCrew: 0,
+    shadowVotes: 0,       // raw count of Shadow Vote credits earned
+    shadowVoteGames: 0,   // distinct games with >=1 Shadow Vote (for the rate below)
+    eligibleCrewGamesForShadowVote: 0, // crew games where a Shadow Vote was even trackable
 
     tasksDoneSum: 0,     // exact task fractions, only from newer-format logs
     tasksTotalSum: 0,
@@ -53,7 +56,8 @@ function createEmptyAggregateStats(displayName) {
     ejectionRateAsCrew: 0,
     ejectionRateAsImpostor: 0,
     voteAccuracy: 0,
-    decisiveVoteRate: 0
+    decisiveVoteRate: 0,
+    shadowVoteRate: null
   };
 }
 
@@ -109,6 +113,13 @@ function mergeGameRecordIntoAggregate(aggregate, gameRecord) {
   aggregate.votesCastAsCrew += num(g.votesCastAsCrew);
   aggregate.correctVotesAsCrew += num(g.correctVotesAsCrew);
   aggregate.incorrectVotesAsCrew += num(g.incorrectVotesAsCrew);
+  aggregate.shadowVotes += num(g.shadowVotes);
+  if (num(g.shadowVotes) > 0) {
+    aggregate.shadowVoteGames += 1;
+  }
+  if (num(g.gamesAsCrewmate) > 0 && num(g.shadowVoteEligible) > 0) {
+    aggregate.eligibleCrewGamesForShadowVote += 1;
+  }
 
   // Only newer-format logs have this - older games simply don't contribute.
   if (typeof g.tasksDone === 'number' && typeof g.tasksTotal === 'number' && g.tasksTotal > 0) {
@@ -129,6 +140,7 @@ function finalizePlayerRates(playerStats) {
     stat.ejectionRateAsImpostor = stat.gamesAsImpostor ? stat.ejectionsAsImpostor / stat.gamesAsImpostor : 0;
     stat.voteAccuracy = stat.votesCastAsCrew ? stat.correctVotesAsCrew / stat.votesCastAsCrew : 0;
     stat.decisiveVoteRate = stat.votesCast ? stat.decisiveVotes / stat.votesCast : 0;
+    stat.shadowVoteRate = stat.eligibleCrewGamesForShadowVote ? stat.shadowVoteGames / stat.eligibleCrewGamesForShadowVote : null;
     stat.exactTaskCompletionRate = stat.tasksTotalSum ? stat.tasksDoneSum / stat.tasksTotalSum : null;
   }
 

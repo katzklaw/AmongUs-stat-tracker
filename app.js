@@ -848,7 +848,10 @@ function openPlayerDetail(playerName) {
     ['Votes Skipped', stat.votesSkipped],
     ['Votes Cast as Crew', stat.votesCastAsCrew],
     ['Vote Accuracy (as Crew)', formatPercent(stat.voteAccuracy)],
-    ['Decisive Votes', stat.decisiveVotes]
+    ['Decisive Votes', stat.decisiveVotes],
+    ['Shadow Votes', stat.shadowVotes],
+    ['Eligible Crew Games (post-cutoff)', stat.eligibleCrewGamesForShadowVote],
+    ['Shadow Vote Rate', stat.shadowVoteRate === null ? 'No data yet' : formatPercent(stat.shadowVoteRate)]
   ];
 
   elements.playerDetailSummary.innerHTML = cards.map(([label, value]) => `
@@ -1003,7 +1006,7 @@ async function handleFiles(fileList) {
   }
 
   let addedCount = 0;
-  let retaggedCount = 0;
+  let refreshedCount = 0;
 
   // O(1) duplicate lookup instead of scanning the whole array per file -
   // matters once you're at hundreds of games and importing folders at once.
@@ -1042,18 +1045,21 @@ async function handleFiles(fileList) {
         changedEntries.push(parsed);
         addedCount += 1;
 
-      } else if (existing.category !== parsed.category) {
+      } else {
 
-        // Same game re-imported under a different tag: just retag it,
-        // don't duplicate it. Keep the newer fileName too, in case it
-        // was re-exported/renamed since the last import.
-        existing.category = parsed.category;
-        existing.fileName = parsed.fileName;
+        // Same game re-imported (same file, possibly re-parsed by a newer
+        // version of this app, or re-tagged to a different category) -
+        // always refresh the stored data to what the parser produces now,
+        // rather than silently keeping whatever was stored before. That's
+        // what makes re-uploading old logs actually pick up parser fixes.
+        for (const key of Object.keys(existing)) {
+          delete existing[key];
+        }
+        Object.assign(existing, parsed);
         changedEntries.push(existing);
-        retaggedCount += 1;
+        refreshedCount += 1;
 
       }
-      // else: identical game, identical category - already imported, skip.
 
     } catch (err) {
 
@@ -1107,8 +1113,8 @@ async function handleFiles(fileList) {
 
     renderAll();
 
-    if (addedCount || retaggedCount) {
-      console.log(`Imported ${addedCount} new game(s), retagged ${retaggedCount} game(s).`);
+    if (addedCount || refreshedCount) {
+      console.log(`Imported ${addedCount} new game(s), refreshed ${refreshedCount} existing game(s).`);
     }
 
   } catch (err) {
