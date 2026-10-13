@@ -32,8 +32,6 @@ const elements = {
   playerDetailKillLocations: document.getElementById('playerDetailKillLocations'),
   playerDetailDeathLocations: document.getElementById('playerDetailDeathLocations'),
   playerDetailMonthlyBody: document.getElementById('playerDetailMonthlyBody'),
-  playerNameHeader: document.getElementById('playerNameHeader'),
-  playerGamesHeader: document.getElementById('playerGamesHeader'),
 
 };
 
@@ -59,7 +57,7 @@ const state = {
 
     trendsPlayerName: null,
 
-    playerSort: { key: 'games', dir: 'desc' }
+    playerSort: { key: 'gamesPlayed', dir: 'desc' }
 
 };
 
@@ -241,10 +239,19 @@ function sortPlayerRows(rows) {
   const factor = dir === 'asc' ? 1 : -1;
 
   return rows.slice().sort((a, b) => {
-    if (key === 'name') {
+    if (key === 'playerName') {
       return factor * a.playerName.localeCompare(b.playerName);
     }
-    return factor * (a.gamesPlayed - b.gamesPlayed);
+
+    // Numeric columns: players with no data for a rate (null/NaN) always
+    // sink to the bottom, whichever direction you're sorting.
+    const av = Number.isFinite(a[key]) ? a[key] : null;
+    const bv = Number.isFinite(b[key]) ? b[key] : null;
+    if (av === null && bv === null) return a.playerName.localeCompare(b.playerName);
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (av !== bv) return factor * (av - bv);
+    return a.playerName.localeCompare(b.playerName);
   });
 }
 
@@ -253,7 +260,7 @@ function toggleSort(key) {
     state.playerSort.dir = state.playerSort.dir === 'asc' ? 'desc' : 'asc';
   } else {
     state.playerSort.key = key;
-    state.playerSort.dir = key === 'name' ? 'asc' : 'desc';
+    state.playerSort.dir = key === 'playerName' ? 'asc' : 'desc';
   }
   renderPlayers();
 }
@@ -262,12 +269,9 @@ function updatePlayerTableHeaders() {
   const { key, dir } = state.playerSort;
   const arrow = dir === 'asc' ? ' ▲' : ' ▼';
 
-  if (elements.playerNameHeader) {
-    elements.playerNameHeader.textContent = 'Player' + (key === 'name' ? arrow : '');
-  }
-  if (elements.playerGamesHeader) {
-    elements.playerGamesHeader.textContent = 'Games' + (key === 'games' ? arrow : '');
-  }
+  document.querySelectorAll('th.sortable[data-sort]').forEach((th) => {
+    th.textContent = th.dataset.label + (th.dataset.sort === key ? arrow : '');
+  });
 }
 
 function renderPlayers() {
@@ -1141,13 +1145,9 @@ function bindEvents() {
     event.preventDefault();
   });
 
-  if (elements.playerNameHeader) {
-      elements.playerNameHeader.onclick = () => toggleSort('name');
-  }
-
-  if (elements.playerGamesHeader) {
-      elements.playerGamesHeader.onclick = () => toggleSort('games');
-  }
+  document.querySelectorAll('th.sortable[data-sort]').forEach((th) => {
+    th.onclick = () => toggleSort(th.dataset.sort);
+  });
 
   if (elements.playerManagerButton) {
       elements.playerManagerButton.onclick = openPlayerManager;
@@ -1325,6 +1325,130 @@ function bindEvents() {
 }
 
 
+function setCloudStatus(text, isError) {
+  const el = document.getElementById('cloudStatus');
+  if (!el) return;
+  el.hidden = !text;
+  el.textContent = text || '';
+  el.classList.toggle('error', !!isError);
+}
+
+function describeSharedData(shared) {
+  const when = shared.updatedAt ? shared.updatedAt.toLocaleString() : 'unknown';
+  return `${shared.gameCount} games - last updated ${when}`;
+}
+
+// Viewer mode: everyone who isn't the admin. Read-only, loads the
+// published snapshot from Firebase; nothing is read from or written to
+// this browser's local storage.
+async function bootstrapViewer() {
+  document.body.classList.add('viewer-mode');
+
+  const subtitle = document.getElementById('headerSubtitle');
+  if (subtitle) subtitle.textContent = 'Shared stats - search and click column headers to sort.';
+
+  state.playerSettings = { aliases: {}, hidden: [], keepSingleGame: [] };
+  state.entries = [];
+  updateCategoryFilterOptions();
+  bindEvents();
+  renderAll();
+  setCloudStatus('Loading shared stats...');
+
+  try {
+    const shared = await fetchSharedData();
+    state.playerSettings = shared.settings;
+    state.entries = shared.entries;
+    updateCategoryFilterOptions();
+    renderAll();
+    setCloudStatus(describeSharedData(shared));
+  } catch (err) {
+    console.error('Failed to load shared stats:', err);
+    setCloudStatus("Couldn't load the shared stats (" + (err && err.code ? err.code : 'see console') + "). Check your Firestore rules allow public reads.", true);
+  }
+}
+
+// Admin-only buttons: sign in with Google, publish local data, or pull the
+// shared copy down into this browser.
+function bindCloudControls() {
+  const controls = document.getElementById('cloudControls');
+  if (!controls || !isCloudConfigured()) return;
+
+  controls.hidden = false;
+  initCloud();
+
+  const signInBtn = document.getElementById('cloudSignInButton');
+  const publishBtn = document.getElementById('cloudPublishButton');
+  const loadBtn = document.getElementById('cloudLoadButton');
+
+  onCloudAuthChange((user) => {
+    const isAdmin = !!user && (user.email || '').toLowerCase() === (window.ADMIN_EMAIL || '').toLowerCase();
+    publishBtn.hidden = !isAdmin;
+    loadBtn.hidden = !isAdmin;
+    signInBtn.textContent = user ? (isAdmin ? 'Sign out (' + user.email + ')' : 'Signed in as ' + user.email + ' - not the admin, sign out') : 'Sign in to publish';
+    signInBtn.dataset.signedIn = user ? '1' : '';
+  });
+
+  signInBtn.onclick = async () => {
+    try {
+      if (signInBtn.dataset.signedIn) {
+        await cloudSignOut();
+      } else {
+        await cloudSignIn();
+      }
+    } catch (err) {
+      console.error('Sign-in failed:', err);
+      alert('Sign-in failed: ' + (err && err.message ? err.message : err) + '\n\nIf this mentions an unauthorized domain, add katzklaw.github.io under Firebase console > Authentication > Settings > Authorized domains.');
+    }
+  };
+
+  publishBtn.onclick = async () => {
+    if (!state.entries.length) {
+      alert('There are no games here to publish.');
+      return;
+    }
+    if (!confirm(`Publish ${state.entries.length} games and your alias/hidden settings to the shared database? This replaces what everyone else currently sees.`)) {
+      return;
+    }
+    publishBtn.disabled = true;
+    setCloudStatus('Publishing...');
+    try {
+      const result = await publishSharedData(state.entries, state.playerSettings);
+      setCloudStatus(`Published ${result.games} games (${result.chunks} chunk${result.chunks === 1 ? '' : 's'}) at ${new Date().toLocaleString()}.`);
+    } catch (err) {
+      console.error('Publish failed:', err);
+      setCloudStatus('Publish failed: ' + (err && err.code ? err.code : err.message), true);
+      alert('Publish failed: ' + (err && err.message ? err.message : err));
+    } finally {
+      publishBtn.disabled = false;
+    }
+  };
+
+  loadBtn.onclick = async () => {
+    if (!confirm('Replace the games and settings in THIS browser with the shared copy? Anything you have not published will be lost here.')) {
+      return;
+    }
+    loadBtn.disabled = true;
+    setCloudStatus('Loading shared copy...');
+    try {
+      const shared = await fetchSharedData();
+      await deleteAllEntries();
+      await saveEntries(shared.entries);
+      state.playerSettings = shared.settings;
+      await savePlayerSettings(state.playerSettings);
+      state.entries = shared.entries;
+      state.fingerprintIndex = null;
+      updateCategoryFilterOptions();
+      renderAll();
+      setCloudStatus('Loaded ' + describeSharedData(shared));
+    } catch (err) {
+      console.error('Load failed:', err);
+      setCloudStatus('Load failed: ' + (err && err.code ? err.code : err.message), true);
+    } finally {
+      loadBtn.disabled = false;
+    }
+  };
+}
+
 async function bootstrap() {
 
   try {
@@ -1345,6 +1469,7 @@ async function bootstrap() {
 
   updateCategoryFilterOptions();
   bindEvents();
+  bindCloudControls();
 
   try {
 
@@ -1359,4 +1484,10 @@ async function bootstrap() {
 
 }
 
-bootstrap();
+// Shared (read-only) view is the default once Firebase is configured; add
+// ?admin to the URL for the full import/manage tool.
+if (isCloudConfigured() && !new URLSearchParams(location.search).has('admin')) {
+  bootstrapViewer();
+} else {
+  bootstrap();
+}

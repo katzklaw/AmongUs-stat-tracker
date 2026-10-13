@@ -482,3 +482,13 @@ tbody tr:hover {
 .collapsible-section .table-wrap {
   margin-top: 12px;
 }
+
+/* Firebase sharing */
+.cloud-controls { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+.cloud-controls a { color: inherit; opacity: 0.8; font-size: 0.9rem; }
+.cloud-status { margin: 4px 0 0; font-size: 0.85rem; opacity: 0.75; }
+.cloud-status.error { color: #ff7b7b; opacity: 1; }
+body.viewer-mode #dropZone,
+body.viewer-mode #playerManagerButton,
+body.viewer-mode #clearButton,
+body.viewer-mode #cloudControls { display: none !important; }

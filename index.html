@@ -11,7 +11,8 @@
       <header class="page-header">
         <div>
           <h1>Among Us Stat Tracker</h1>
-          <p>Drop one or more log files to parse them locally and search the results.</p>
+          <p id="headerSubtitle">Drop one or more log files to parse them locally and search the results.</p>
+          <p id="cloudStatus" class="cloud-status" hidden></p>
         </div>
       </header>
 
@@ -73,6 +74,12 @@
         </select>
         <button id="playerManagerButton" type="button">Player Manager</button>
         <button id="clearButton" type="button">Clear saved data</button>
+        <span id="cloudControls" class="cloud-controls" hidden>
+          <button id="cloudSignInButton" type="button">Sign in to publish</button>
+          <button id="cloudPublishButton" type="button" hidden>Publish to shared database</button>
+          <button id="cloudLoadButton" type="button" hidden>Load from shared database</button>
+          <a id="cloudViewLink" href="./" target="_blank" rel="noopener">Open shared view</a>
+        </span>
       </section>
 
       <section class="summary-grid">
@@ -106,18 +113,18 @@
           <table>
             <thead>
               <tr>
-                <th id="playerNameHeader" class="sortable">Player</th>
-                <th id="playerGamesHeader" class="sortable">Games</th>
-                <th>Crew Games</th>
-                <th>Imp Games</th>
-                <th>Crew Wins</th>
-                <th>Imp Wins</th>
-                <th>Crew Win Rate</th>
-                <th>Imp Win Rate</th>
-                <th>Kills</th>
-                <th>Avg Kills / Imp Game</th>
-                <th>Survival Rate</th>
-                <th>Task Completion</th>
+                <th class="sortable" data-sort="playerName" data-label="Player">Player</th>
+                <th class="sortable" data-sort="gamesPlayed" data-label="Games">Games</th>
+                <th class="sortable" data-sort="gamesAsCrewmate" data-label="Crew Games">Crew Games</th>
+                <th class="sortable" data-sort="gamesAsImpostor" data-label="Imp Games">Imp Games</th>
+                <th class="sortable" data-sort="crewWins" data-label="Crew Wins">Crew Wins</th>
+                <th class="sortable" data-sort="impWins" data-label="Imp Wins">Imp Wins</th>
+                <th class="sortable" data-sort="crewWinRate" data-label="Crew Win Rate">Crew Win Rate</th>
+                <th class="sortable" data-sort="impWinRate" data-label="Imp Win Rate">Imp Win Rate</th>
+                <th class="sortable" data-sort="kills" data-label="Kills">Kills</th>
+                <th class="sortable" data-sort="avgKillsPerImpGame" data-label="Avg Kills / Imp Game">Avg Kills / Imp Game</th>
+                <th class="sortable" data-sort="survivalRate" data-label="Survival Rate">Survival Rate</th>
+                <th class="sortable" data-sort="taskCompletionRate" data-label="Task Completion">Task Completion</th>
                 <th></th>
               </tr>
             </thead>
@@ -255,6 +262,11 @@
       </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="js/cloud.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/playerStats.js"></script>
     <script src="js/playerDatabase.js"></script>
