@@ -1412,7 +1412,7 @@ function bindCloudControls() {
     publishBtn.disabled = true;
     setCloudStatus('Publishing...');
     try {
-      const result = await publishSharedData(state.entries, state.playerSettings);
+      const result = await publishSharedData(state.entries, state.playerSettings, (msg) => setCloudStatus(msg));
       setCloudStatus(`Published ${result.games} games (${result.chunks} chunk${result.chunks === 1 ? '' : 's'}) at ${new Date().toLocaleString()}.`);
     } catch (err) {
       console.error('Publish failed:', err);

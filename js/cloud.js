@@ -30,6 +30,9 @@ function initCloud() {
   if (!cloudDb) {
     firebase.initializeApp(window.FIREBASE_CONFIG);
     cloudDb = firebase.firestore();
+    // Falls back to long-polling when the browser/network/extension blocks
+    // Firestore's streaming connection (a common cause of silent hangs).
+    cloudDb.settings({ experimentalAutoDetectLongPolling: true, merge: true });
     cloudAuth = firebase.auth();
   }
   return true;
@@ -89,47 +92,55 @@ async function fetchSharedData() {
   };
 }
 
-async function publishSharedData(entries, settings) {
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label + " timed out after " + Math.round(ms / 1000) + "s - Firestore isn't responding. Check the Firestore database exists, rules are published, and ad/privacy blockers aren't blocking firestore.googleapis.com.")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Each chunk is its own write (a single batch of everything could exceed
+// Firestore's 10MiB request limit), with progress reported as it goes.
+async function publishSharedData(entries, settings, onProgress) {
   initCloud();
+  const report = (msg) => { if (onProgress) onProgress(msg); };
 
   const chunks = chunkEntries(entries);
-  const existing = await cloudDb.collection(CLOUD_GAMES_COLLECTION).get();
+
+  report("Contacting Firestore...");
+  const existing = await withTimeout(cloudDb.collection(CLOUD_GAMES_COLLECTION).get({ source: "server" }), 30000, "Reading existing data");
   const keepIds = new Set(chunks.map((_, i) => chunkDocId(i)));
 
-  // Firestore batches cap at 500 operations; we'd need ~hundreds of
-  // thousands of games to get near that, but chunk the batches anyway.
-  const ops = [];
-  chunks.forEach((chunk, i) => {
-    ops.push({
-      ref: cloudDb.collection(CLOUD_GAMES_COLLECTION).doc(chunkDocId(i)),
-      data: { index: i, count: chunk.length, json: JSON.stringify(chunk) }
-    });
-  });
-  existing.docs.forEach((doc) => {
+  for (let i = 0; i < chunks.length; i++) {
+    report(`Publishing chunk ${i + 1} of ${chunks.length}...`);
+    await withTimeout(
+      cloudDb.collection(CLOUD_GAMES_COLLECTION).doc(chunkDocId(i)).set({
+        index: i,
+        count: chunks[i].length,
+        json: JSON.stringify(chunks[i])
+      }),
+      90000,
+      `Writing chunk ${i + 1}`
+    );
+  }
+
+  for (const doc of existing.docs) {
     if (!keepIds.has(doc.id)) {
-      ops.push({ ref: doc.ref, remove: true });
+      await withTimeout(doc.ref.delete(), 30000, "Removing old chunk");
     }
-  });
-  ops.push({
-    ref: cloudDb.collection(CLOUD_META_COLLECTION).doc(CLOUD_SETTINGS_DOC),
-    data: {
+  }
+
+  report("Saving settings...");
+  await withTimeout(
+    cloudDb.collection(CLOUD_META_COLLECTION).doc(CLOUD_SETTINGS_DOC).set({
       json: JSON.stringify(settings || { aliases: {}, hidden: [], keepSingleGame: [] }),
       gameCount: entries.length,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }
-  });
-
-  for (let i = 0; i < ops.length; i += 400) {
-    const batch = cloudDb.batch();
-    ops.slice(i, i + 400).forEach((op) => {
-      if (op.remove) {
-        batch.delete(op.ref);
-      } else {
-        batch.set(op.ref, op.data);
-      }
-    });
-    await batch.commit();
-  }
+    }),
+    30000,
+    "Saving settings"
+  );
 
   return { chunks: chunks.length, games: entries.length };
 }
